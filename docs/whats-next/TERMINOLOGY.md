@@ -17,6 +17,7 @@ DRAWING.md and DRAWING-issue.md.
 | all closed | Every issue of a milestone, or every child of an epic, closed. |
 | milestone | A forge milestone of the repo. |
 | due date | The date an issue or a milestone is due, if it has one. |
+| label | A forge label of the repo, on GitLab of its groups too; an issue has any number of them. |
 | epic | An issue with the Epic label (the label is a setting). |
 | child | An issue an epic holds, or on GitHub any issue. On Forgejo: an issue the epic depends on, other epics left out (an epic that depends on another waits for it). On GitLab: an issue it links as related, other epics left out (a related link has no direction). On GitHub: a sub-issue, of any issue. Only on GitHub does a child have children of its own, and unfold to them. The issue detail lists them under `Children`, apart from Blocked by (#86). |
 | parent | The issue an issue is a child of: its epic, or on GitHub any parent issue. The issue detail names it `Epic`, or `Parent` when it is not an epic (#62, built 0.68.0). |
@@ -68,6 +69,7 @@ free one is blocked.
 | for-you line | What there is for you: how many are yours, available, with others and blocked, each said by its mark and count. |
 | bottom line | The last line of a pane. |
 | menu | `☰` at the right of a pane's top row: what can be done there, each with its hotkey (#62, built 0.68.0). |
+| labels list | The repo's labels, opened over the issue detail from Labels, each with a box saying whether the issue has it (#66). |
 | help page | The page that says what each sign and colour means, the same in every pane; shown in place of the list or detail, left with Back (#63, built 0.70.0). |
 
 ## Actions
@@ -79,6 +81,7 @@ free one is blocked.
 | Prompt | Puts the issue into your prompt, and assigns you if needed (#62, built 0.68.0; was Work on this). |
 | Assign Me, Unassign Me | Adds or removes only you as assignee. |
 | Close, Reopen | Closes or reopens the issue or milestone. |
+| Labels | Opens the labels list, where a press adds a label to the issue or takes it off (#66). |
 | Open in Browser | Opens the issue's or milestone's page on the forge. |
 | Help | Opens the help page; `/next help` opens it in What's next (#63, built 0.70.0). |
 
@@ -88,7 +91,7 @@ free one is blocked.
 |---|---|
 | setup | The steps checked before the panes show: Repo, Forge, Token, Access, Actions. |
 | token | An access token for the forge, from its token setting only. |
-| read only | What's Next may read but not assign or close; setup's Actions step says why. |
+| read only | What's Next may read but not assign, close or change labels; setup's Actions step says why. |
 | Compact, Icons | The settings for how lists and buttons look. |
 
 ## When something is not known

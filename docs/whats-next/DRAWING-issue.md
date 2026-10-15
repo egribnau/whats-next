@@ -291,6 +291,44 @@ blockers its children: no Blocked by key (#86, built 0.73.0, decided 3).
 The other lines of a detail: Due (long form), Branch plain, Time,
 Labels, Commits (sha dim, message cut, age dim at the right; three at
 most). A line the forge would not answer for is left out, as is an empty
-one.
+one, but Labels where the token may change them: there it is a plain
+button, as an Epic line, that opens the labels list, and with no labels
+it reads `none`, dim, so there is something to press (#66, decided 1D).
 
 Drawn by: `refLine`, under its key by `keyed`, in `issueView` (hooks/views/issue.tsx).
+
+## The labels list
+
+From the issue detail, a label is added or taken off in the labels list
+(#66). It opens from Labels in the menu (hotkey `l`) and from the Labels
+line, both only where the token may write, as Assign Me and Close (decided
+1A and 1D). It opens over the rows as the menu does, in a dim frame at the
+right (DRAWING.md, The menu), but its frame starts on the Labels line's
+row, its first line under it, as the detail is scrolled; where it does not fit there it
+moves up as far as it must, to under the top row at most, and the Labels
+line scrolled out of view starts it there too. Opening it shuts the menu
+and the milestone filter's list. Its first line is `Labels`, dim, and at its right `✕`, a
+button that shuts it, as the cross that closes a pane; that line stays
+when the labels scroll. `l` again, the Labels line again or `☰` shut it
+too.
+
+Its lines are the repo's labels, on GitLab its groups' too, by name, each
+in its colour as everywhere (Colours, DRAWING.md), after a box: `☑` on the
+issue, `☐` not (decided 2i). Each line is a plain button: Enter adds that
+label or takes it off at once, and the list stays open for the next
+(decided 3a). The Labels line and the lists show the change at once, as
+after Assign Me and Close; taking `epic` off makes the issue no epic there.
+A list longer than the pane is cut to it, and the focus scrolls it, as a
+detail scrolls. Until the forge answers it reads `Loading …`; a repo with
+none, `No labels in boats/radar.`, dim; a list the forge refused, why, red.
+
+A refusal is red under the heading, where Assign's and Close's go: `Could
+not add bug to #29: 403 Forbidden.` (decided 4).
+
+The boxes are on the help page, under Buttons.
+
+Typing to narrow the list, as the forges do, is for later (2iv on the
+canvas).
+
+Drawn by: `labelsList` in `issueView` (hooks/views/issue.tsx), in the
+frame's `overlay`.

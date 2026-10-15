@@ -230,12 +230,13 @@ text is wrapped into lines first, never left to wrap.
 
 Tab and the arrows stop on every control of a detail, top to bottom: in
 the issue detail `[ ← ]`, `[ Prompt ]`, `[ ☰ ]`, the Epic or Parent line, each open
-Children, Blocked by and Blocks line, the Description rule, the Comments rule, each comment, and
+Children, Blocked by and Blocks line, the Labels line where the token may
+change labels (#66), the Description rule, the Comments rule, each comment, and
 each `… n more lines` under Description or a comment, then the bottom
 line, which opens the repository and does not scroll the detail (#65,
 built 0.74.0).
 Enter presses the one in focus: a rule or a comment folds or unfolds, a
-line naming an issue opens it. No key of its own for folding (#62, built 0.68.0, decided 5a).
+line naming an issue opens it, the Labels line opens the labels list. No key of its own for folding (#62, built 0.68.0, decided 5a).
 
 A detail opens as its rules say, folded where they say so, every time:
 nothing is remembered per issue or milestone. Refresh keeps what is
@@ -269,8 +270,9 @@ step has `Check Again`, once done its top row a Refresh button (hotkey
 `r`), and its one-time choices only their heading (#97). The issue
 detail keeps `[ Prompt ]` (hotkey `p`) as a button of its own, on the
 top row just before `☰` (#62, built 0.68.0, decided 7b and 7c); Assign Me or
-Unassign Me, Close or Reopen, Open in Browser and Refresh go in the
-menu. The milestone detail: Open in Browser, Close or Reopen, Refresh.
+Unassign Me, Close or Reopen, Labels (hotkey `l`, which opens the labels
+list: DRAWING-issue.md, The labels list; #66), Open in Browser and Refresh
+go in the menu. The milestone detail: Open in Browser, Close or Reopen, Refresh.
 Every hotkey still works with the menu shut: its Buttons are drawn hidden
 at the start of the top row, and Tab and the arrows pass over them.
 
@@ -278,10 +280,12 @@ A menu line is its words, padded, and its hotkey dim at the right
 (`Open in Browser o`); pressing one shuts the menu. Opening the menu shuts
 the milestone filter's list, and the other way round. Where the token may
 not assign or close, the issue detail's menu says why, dim, under its
-lines (#62, built 0.68.0).
+lines (#62, built 0.68.0); it names labels too, and Labels is left out
+with Assign Me and Close (#66).
 
-The menu and the milestone filter's list open over the rows under the top
-row, at the right, in a dim frame: the rows stay where they are, and what
+The menu, the milestone filter's list and the issue detail's labels list
+(#66) open over the rows under the top row (the labels list's frame on the
+Labels line's row: DRAWING-issue.md, The labels list), at the right, in a dim frame: the rows stay where they are, and what
 the list covers shows again once it shuts. Each line is padded to the
 list's width, so nothing beneath shows through (#62, built 0.68.1).
 
@@ -292,14 +296,15 @@ hooks/views/frame.tsx.
 Buttons and the lines of the menu name an action in Title Case: every
 word capitalised but a short one inside (in, to, on): `Prompt`,
 `Assign Me`, `Unassign Me`, `Open in Browser`, `Close`, `Reopen`,
-`Refresh`, `Help` (#62, built 0.68.0, decided 7d). Section names, rules and states
+`Labels`, `Refresh`, `Help` (#62, built 0.68.0, decided 7d). Section names, rules and states
 keep their own case.
 
 `☰` (U+2630, plain Unicode, one cell) with Icons on and off, as everyone
 knows it and the menu says what is in it.
 
 Back, at the left of a detail's top row, is `[ ← ]` alone, in every
-detail, with Icons on and off: not `← Milestones` or `← #24` (#62, built 0.68.0, decided 7a). Its hotkey stays `b`. These two are the buttons
+detail, with Icons on and off: not `← Milestones` or `← #24` (#62, built 0.68.0, decided 7a). Its hotkey stays `b`. These two, and the labels
+list's `✕` (DRAWING-issue.md, The labels list; #66), are the buttons
 with a sign and no word when Icons is off.
 
 ## The help page
