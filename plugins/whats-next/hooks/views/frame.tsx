@@ -30,10 +30,11 @@ export const views = new Map<string, { rows: number; room: number; at: Map<strin
 // is shut (DRAWING.md, The menu), and the first control drawn after them.
 export const hidden = new Map<string, { keys: Set<string>; first: string }>()
 
-// The issue detail's labels list as last drawn in each pane, by pane id: how
-// many of its lines show, for the focus to scroll it (DRAWING-issue.md, The
-// labels list). A pane without the list open has none.
-export const labelsShown = new Map<string, { lines: number; room: number }>()
+// The issue detail's labels list or milestone list as last drawn in each
+// pane, by pane id: which, and how many of its lines show, for the focus to
+// scroll it (DRAWING-issue.md, The labels list). A pane without either open
+// has none.
+export const listShown = new Map<string, { list: 'labels' | 'milestones'; lines: number; room: number }>()
 
 // What a press does, for the views: each changes what the panes show, so
 // none of it is done while drawing.
@@ -53,6 +54,8 @@ export type Acts = {
   writeIssue: (n: number, change: (t: Tracker) => Promise<string | null>, what: string) => Promise<boolean>
   toggleLabels: () => unknown
   setLabel: (i: IssueDetail, l: Label, on: boolean) => Promise<boolean>
+  toggleMilestones: () => unknown
+  setMilestone: (i: IssueDetail, m: Milestone | null) => Promise<boolean>
   workOn: (i: IssueDetail) => unknown
   openUrl: (url: string) => unknown
   counted: <T>(label: string, action: () => Promise<T>) => Promise<T>
@@ -115,14 +118,14 @@ export async function frame($: EngineInterface, p: Pane) {
   }
   // [ ☰ ] at the right of a top row; it shuts the milestone filter's list,
   // as that shuts the menu: one list under the top row at a time. With the
-  // labels list open it shuts that list alone.
+  // labels list or the milestone list open it shuts that list alone.
   const menuButton = (
     <Button
       key="menu"
       label="☰"
       onPress={async () => {
         await update($, filterOpen, () => false)
-        await go($, id, w => (w.labels ? step.toggleLabels(w) : step.toggleMenu(w)))
+        await go($, id, w => (w.labels ? step.toggleLabels(w) : w.milestones ? step.toggleMilestones(w) : step.toggleMenu(w)))
       }}
     />
   )

@@ -358,6 +358,8 @@ export function github(send: Send, r: Repo, token: string | null, known: string 
       on
         ? patchAt(`${api}/issues/${n}/labels`, { labels: [l.name] }, 'POST')
         : patchAt(`${api}/issues/${n}/labels/${encodeURIComponent(l.name)}`, null, 'DELETE'),
+    // By the milestone's number; null takes the issue out of its own.
+    milestone: (n, m) => (m && m.id === undefined ? Promise.resolve(`no number for ${m.title}`) : patch(n, { milestone: m ? m.id : null })),
   }
 }
 

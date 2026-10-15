@@ -106,6 +106,7 @@ function fake(f: Fake, calls: string[] = []): Tracker {
     closeMilestone: async () => null,
     labels: async () => [],
     label: async () => null,
+    milestone: async () => null,
   }
 }
 

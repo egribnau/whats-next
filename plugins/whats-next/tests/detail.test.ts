@@ -561,6 +561,7 @@ test('with write:issue and push, Assign Me and Close are in the menu, and hidden
     'assign',
     'close',
     'labels',
+    'milestone',
     'open',
     'refresh',
     'help',
@@ -570,6 +571,7 @@ test('with write:issue and push, Assign Me and Close are in the menu, and hidden
     'follow-24',
     'follow-19',
     'follow-31',
+    'milestone-line',
     'labels-line',
     'comments-section',
     'comment-0',
@@ -585,12 +587,13 @@ test('with write:issue and push, Assign Me and Close are in the menu, and hidden
   // The menu open: a line for each, its words then its hotkey.
   await ui.press({ key: 'menu' })
   const menu = (await keys(ui)).filter(k => k.startsWith('menu-'))
-  expect(menu).toEqual(['menu-assign', 'menu-close', 'menu-labels', 'menu-open', 'menu-refresh', 'menu-help'])
+  expect(menu).toEqual(['menu-assign', 'menu-close', 'menu-labels', 'menu-milestone', 'menu-open', 'menu-refresh', 'menu-help'])
   const shown = await texts(ui)
   for (const [label, key] of [
     ['Assign Me', 'a'],
     ['Close', 'c'],
     ['Labels', 'l'],
+    ['Milestone', 'm'],
     ['Open in Browser', 'o'],
     ['Refresh', 'r'],
   ] as const) {
@@ -673,8 +676,8 @@ test('a refused assign keeps the issue open with why, and Prompt stays there too
 })
 
 for (const [why, rights, how] of [
-  ['the token lacks write:issue', { push: true }, "Assign, close and labels need a token with write:issue: the setup guide's steps make one."],
-  ['alice may not push here', { push: false, scopes: ['write:issue'] }, 'Assign, close and labels need push rights on boats/radar.'],
+  ['the token lacks write:issue', { push: true }, "Assign, close, labels and milestone need a token with write:issue: the setup guide's steps make one."],
+  ['alice may not push here', { push: false, scopes: ['write:issue'] }, 'Assign, close, labels and milestone need push rights on boats/radar.'],
 ] as const) {
   test(`read only (${why}): no Assign, Close or Labels, one line on how in the menu`, TOKEN, async ($, on) => {
     world(on, FULL, [], [], 'open', { ...rights })
@@ -686,7 +689,7 @@ for (const [why, rights, how] of [
     expect((await keys(ui)).filter(k => k.startsWith('menu-'))).toEqual(['menu-open', 'menu-refresh', 'menu-help'])
     // Wrapped to the menu's width, each line its own Text.
     const all = await found(ui)
-    const at = all.findIndex(t => t.text.startsWith('Assign, close and'))
+    const at = all.findIndex(t => t.text.startsWith('Assign, close,'))
     const note = all.slice(at).filter(t => t.props.dimColor === true && how.includes(t.text))
     expect(note.map(t => t.text).join(' ')).toBe(how)
     expect(note.every(t => t.props.dimColor === true)).toBe(true)

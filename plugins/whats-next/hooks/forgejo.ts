@@ -310,6 +310,8 @@ export function forgejo(send: Send, r: Repo, token: string | null, label: string
         : on
           ? patchAt(`${api}/issues/${n}/labels`, { labels: [l.id] }, 'POST')
           : patchAt(`${api}/issues/${n}/labels/${l.id}`, null, 'DELETE'),
+    // By the milestone's id; 0 takes the issue out of its own.
+    milestone: (n, m) => (m && m.id === undefined ? Promise.resolve(`no id for ${m.title}`) : patch(n, { milestone: m?.id ?? 0 })),
   }
 }
 

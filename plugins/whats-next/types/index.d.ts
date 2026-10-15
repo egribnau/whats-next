@@ -162,8 +162,16 @@ export type Page =
   | { kind: 'milestone'; title: string }
   | { kind: 'issue'; number: number; trail: number[]; folds: DetailFolds; milestone: string | null }
 // `labels`: whether the issue detail's labels list is open, and how far
-// it is scrolled, in rows (DRAWING-issue.md, The labels list).
-export type Where = { page: Page; scroll: number; menu: boolean; help: { scroll: number } | null; labels?: { scroll: number } | null }
+// it is scrolled, in rows (DRAWING-issue.md, The labels list); `milestones`
+// the same of its milestone list (DRAWING-issue.md, The milestone list).
+export type Where = {
+  page: Page
+  scroll: number
+  menu: boolean
+  help: { scroll: number } | null
+  labels?: { scroll: number } | null
+  milestones?: { scroll: number } | null
+}
 
 // A label of the repo, as the labels list offers it: its forge colour, and
 // on Forgejo its id, which Forgejo adds and takes off by.

@@ -324,8 +324,9 @@ test('the list\'s frame starts on the Labels line\'s row', TOKEN, async ($, on) 
   const ui = await opened($)
   await ui.press({ key: 'labels-line' })
   const topOf = async () => ((await ui.find({ key: 'labels-list' })) as unknown as { props: { top: number } }).props.top
-  // [ ← ] row 0, the gap row 1, the heading 2, who opened it 3, a gap 4, Labels 5.
-  expect(await topOf()).toBe(5)
+  // [ ← ] row 0, the gap row 1, the heading 2, who opened it 3, a gap 4,
+  // Milestone 5, Labels 6.
+  expect(await topOf()).toBe(6)
 })
 
 test('a list too long to fit below the Labels line starts under the top row', TOKEN, async ($, on) => {

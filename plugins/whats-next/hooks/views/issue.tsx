@@ -1,20 +1,21 @@
 import { atom, memberOf, read } from 'claude-code'
 import type { EngineInterface, RenderChildren } from 'claude-code'
 
-import type { Comment, DetailFolds, IssueDetail, Label, Ref, Repo, RepoLabels } from '../../types'
+import type { Comment, DetailFolds, IssueDetail, Label, Milestone, Ref, Repo, RepoLabels } from '../../types'
 import { age, CLOSED_MARK, fit, FOLD_AT, ICON, whoOf } from '../draw'
-import { isMine, markOf, standing, type Mark, type Standing } from '../epics'
+import { dueFirst, isMine, markOf, standing, type Mark, type Standing } from '../epics'
 import { duration, wrap } from '../issue'
 import { slug } from '../tracker'
 import * as step from '../where'
 import { foldsOf } from '../where'
 import { go } from '../panes'
-import { labelsShown, type Action, type Frame, type Pane } from './frame'
+import { listShown, type Action, type Frame, type Pane } from './frame'
 
 // The state this view reads (the contract in types/index.d.ts).
 const setup = atom({ plugin: 'whats-next', key: 'setup' } as const, { kind: 'checking' })
 const detail = atom({ plugin: 'whats-next', key: 'detail' } as const, { kind: 'idle' })
 const repoLabels = atom({ plugin: 'whats-next', key: 'repoLabels' } as const, { kind: 'idle' })
+const milestones = atom({ plugin: 'whats-next', key: 'milestones' } as const, null)
 
 // The issue detail (DRAWING-issue.md), in place of the list: issue `open`
 // of repo `r`, as read from the forge.
@@ -40,10 +41,12 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
   if (dt.kind === 'error') body.push(...lines('error', `Could not load #${dt.number}: ${dt.message}.`, { color: 'error' }))
   let over: RenderChildren = null
   let shownLabels: { issue: IssueDetail; known: RepoLabels; scroll: number } | null = null
-  labelsShown.delete(id)
+  let shownMilestones: { issue: IssueDetail; open: Milestone[] | null; scroll: number } | null = null
+  listShown.delete(id)
   if (dt.kind === 'ok') {
     const i = dt.issue
-    // Assign, close and labels, when What's Next may: setup's Actions step says so.
+    // Assign, close, labels and milestone, when What's Next may: setup's
+    // Actions step says so.
     const allowed = s.kind === 'ready' ? s.actions : ({ kind: 'read-only', reason: 'scope' } as const)
     const canAct = allowed.kind !== 'read-only'
     // Every key of the detail in one gutter, as wide as the longest, Blocked by.
@@ -134,9 +137,24 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     blockedBy.forEach((x, k) => facts.push(refLine(`blocked-${k}`, k === 0 ? 'Blocked by' : '', x, 'blocker')))
     blocks.forEach((x, k) => facts.push(refLine(`blocks-${k}`, k === 0 ? 'Blocks' : '', x, 'blocks')))
     if (i.due) facts.push(keyed('due', 'Due', d.dueDate('due-date', i.due, now, { form: 'long', bare: true })))
-    if (i.milestone) {
-      facts.push(keyed('milestone', 'Milestone', d.partsLine('milestone-parts', 0, [{ text: i.milestone.title }, ...d.duePart('milestone-due', i.milestone.due, now, { form: 'short' })])))
-    }
+    // Where the token may change it, the Milestone line opens the milestone
+    // list, and stays with none (DRAWING-issue.md, The milestone list).
+    const milestoneText = i.milestone ? (
+      d.partsLine('milestone-parts', 0, [{ text: i.milestone.title }, ...d.duePart('milestone-due', i.milestone.due, now, { form: 'short' })])
+    ) : (
+      <Text dimColor>none</Text>
+    )
+    if (canAct) {
+      facts.push(
+        keyed(
+          'milestone',
+          'Milestone',
+          <Button key="milestone-line" plain onPress={acts.toggleMilestones}>
+            {milestoneText}
+          </Button>,
+        ),
+      )
+    } else if (i.milestone) facts.push(keyed('milestone', 'Milestone', milestoneText))
     // Where the token may change them, the Labels line opens the labels
     // list, and stays with none (DRAWING-issue.md, The labels list).
     const labelsText =
@@ -212,6 +230,7 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
                 ),
             },
             { key: 'labels', label: 'Labels', hotkey: 'l', onPress: acts.toggleLabels },
+            { key: 'milestone', label: 'Milestone', hotkey: 'm', onPress: acts.toggleMilestones },
           ]
         : []),
       { key: 'open', label: 'Open in Browser', hotkey: 'o', onPress: () => acts.openUrl(i.url) },
@@ -221,11 +240,12 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     note = canAct
       ? undefined
       : allowed.kind === 'read-only' && allowed.reason === 'role'
-        ? `Assign, close and labels need Reporter or higher on ${slug(r)}.`
+        ? `Assign, close, labels and milestone need Reporter or higher on ${slug(r)}.`
         : allowed.kind === 'read-only' && allowed.reason === 'push'
-          ? `Assign, close and labels need push rights on ${slug(r)}.`
-          : `Assign, close and labels need a token with ${t?.writeScope ?? 'write:issue'}: the setup guide's steps make one.`
+          ? `Assign, close, labels and milestone need push rights on ${slug(r)}.`
+          : `Assign, close, labels and milestone need a token with ${t?.writeScope ?? 'write:issue'}: the setup guide's steps make one.`
     if (canAct && p.place.labels) shownLabels = { issue: i, known: await read($, repoLabels), scroll: p.place.labels.scroll }
+    if (canAct && p.place.milestones) shownMilestones = { issue: i, open: await read($, milestones), scroll: p.place.milestones.scroll }
     prompt = <Button key="prompt" label={d.say(ICON.work, 'Prompt')} hotkey="p" onPress={() => acts.workOn(i)} />
 
     // Closed: grey as a whole, number and title; blocked: the title dim.
@@ -320,14 +340,40 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     }
   }
   // [ ← ] and the menu, with Prompt before it once the issue is read; the
-  // labels list over the rows when it is open, else the menu.
+  // labels list or the milestone list over the rows when one is open, else
+  // the menu.
   const top = f.detailTop(actions, acts.goBack, prompt)
   if (shownLabels) {
     // Its frame on the Labels line's row, else under the top row.
     const at = f.rowOf(top, body, 'labels-line')
     over = labelsList(shownLabels.issue, shownLabels.known, shownLabels.scroll, at ?? 1)
   }
+  if (shownMilestones) {
+    const at = f.rowOf(top, body, 'milestone-line')
+    over = milestoneList(shownMilestones.issue, shownMilestones.open, shownMilestones.scroll, at ?? 1)
+  }
   return f.detailFrame(top, body, over ?? f.menuLines(actions, note))
+
+  // The pane row a list of `lines` lines starts on: `want` where it fits
+  // below there; where it does not, as far up as it must, to under the top
+  // row at most.
+  function startAt(want: number, lines: number) {
+    const counted = p.requests ? 1 : 0
+    return Math.max(1, Math.min(want, p.height - counted - lines - 3))
+  }
+
+  // A list's first line: its name, dim, and ✕ at the right, button `shut`,
+  // which shuts it; it stays when the lines under it scroll.
+  function listHead(name: string, shut: string, width: number, onPress: () => unknown) {
+    return (
+      <Box key={`${shut}-head`} height={1} flexShrink={0}>
+        <Text dimColor>{fit(name, width - 2).padEnd(width - 1)}</Text>
+        <Button key={shut} plain onPress={onPress}>
+          <Text>✕</Text>
+        </Button>
+      </Box>
+    )
+  }
 
   // The labels list (DRAWING-issue.md, The labels list): the repo's labels,
   // each after a box that says whether issue `i` has it; a press adds it or
@@ -335,23 +381,12 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
   // `want`: the pane row it starts on where it fits below there; where it
   // does not, it moves up as far as it must, to under the top row at most.
   function labelsList(i: IssueDetail, known: RepoLabels, scroll: number, want: number): RenderChildren {
-    const counted = p.requests ? 1 : 0
-    const startAt = (lines: number) => Math.max(1, Math.min(want, p.height - counted - lines - 3))
     const said = (key: string, text: string, props: Record<string, unknown>) => [
       <Box key={key} height={1} flexShrink={0}>
         <Text {...props}>{text}</Text>
       </Box>,
     ]
-    // Its first line: Labels, dim, and ✕ at the right, which shuts it; it
-    // stays when the labels scroll.
-    const head = (width: number) => (
-      <Box key="labels-head" height={1} flexShrink={0}>
-        <Text dimColor>{fit('Labels', width - 2).padEnd(width - 1)}</Text>
-        <Button key="labels-shut" plain onPress={acts.toggleLabels}>
-          <Text>✕</Text>
-        </Button>
-      </Box>
-    )
+    const head = (width: number) => listHead('Labels', 'labels-shut', width, acts.toggleLabels)
     if (known.kind === 'ok' && known.labels.length > 0) {
       const has = new Set(i.labels.map(l => l.name))
       const width = Math.min(columns - 2, Math.max(8, ...known.labels.map(l => l.name.length + 2)))
@@ -370,8 +405,8 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
           </Box>
         )
       })
-      const at = startAt(lines.length)
-      labelsShown.set(id, { lines: lines.length, room: f.overlayRoom(at) - 1 })
+      const at = startAt(want, lines.length)
+      listShown.set(id, { list: 'labels', lines: lines.length, room: f.overlayRoom(at) - 1 })
       return f.overlay('labels-list', width, lines, scroll, head(width), at)
     }
     const text =
@@ -383,7 +418,63 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
       said('labels-said', fit(text, width).padEnd(width), known.kind === 'error' ? { color: 'error' } : { dimColor: true }),
       undefined,
       head(width),
-      startAt(1),
+      startAt(want, 1),
     )
+  }
+
+  // The milestone list (DRAWING-issue.md, The milestone list): the open
+  // milestones `open` in the milestone filter's order, due first, then No
+  // milestone; issue `i`'s own in bold, first and grey when it is closed. A
+  // press moves the issue there and shuts the list. Cut to the pane,
+  // scrolled by `scroll`, starting on pane row `want` where it fits.
+  function milestoneList(i: IssueDetail, open: Milestone[] | null, scroll: number, want: number): RenderChildren {
+    const width = Math.min(columns - 2, 20)
+    const head = listHead('Milestone', 'milestones-shut', width, acts.toggleMilestones)
+    if (open === null) {
+      return f.overlay(
+        'milestone-list',
+        width,
+        [
+          <Box key="milestones-said" height={1} flexShrink={0}>
+            <Text dimColor>{'Loading …'.padEnd(width)}</Text>
+          </Box>,
+        ],
+        undefined,
+        head,
+        startAt(want, 1),
+      )
+    }
+    const own = i.milestone?.title ?? null
+    const ownClosed = own !== null && !open.some(m => m.title === own)
+    type Choice = { title: string; due: string | null; to: Milestone | null; closed?: boolean }
+    const choices: Choice[] = [
+      ...(ownClosed && i.milestone ? [{ title: i.milestone.title, due: i.milestone.due, to: null, closed: true }] : []),
+      ...dueFirst(open).map(m => ({ title: m.title, due: m.due, to: m as Milestone })),
+      { title: 'No milestone', due: null, to: null },
+    ]
+    const lines = choices.map((c, k) => {
+      const isOwn = c.closed === true || (c.to ? c.title === own : own === null)
+      return (
+        <Box key={`milestone-choice-${k}`} height={1} flexShrink={0}>
+          <Button
+            key={`pick-milestone-${k}`}
+            plain
+            onPress={() =>
+              isOwn
+                ? acts.toggleMilestones()
+                : acts.counted(c.to ? `move #${i.number} to ${c.title}` : `take #${i.number} out of ${own}`, () => acts.setMilestone(i, c.to))
+            }
+          >
+            <Text bold={isOwn} color={c.closed ? 'inactive' : undefined}>
+              {fit(c.title, width - 7).padEnd(width - 6)}
+              {d.dueDate('due', c.due, now, { form: 'short', bare: true, width: 6, done: c.closed })}
+            </Text>
+          </Button>
+        </Box>
+      )
+    })
+    const at = startAt(want, lines.length)
+    listShown.set(id, { list: 'milestones', lines: lines.length, room: f.overlayRoom(at) - 1 })
+    return f.overlay('milestone-list', width, lines, scroll, head, at)
   }
 }

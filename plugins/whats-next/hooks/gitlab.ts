@@ -409,6 +409,9 @@ export function gitlab(send: Send, r: Repo, token: string | null, known: string 
     },
     // By name, leaving the issue's other labels as they are.
     label: (n, l, on) => put(n, on ? { add_labels: l.name } : { remove_labels: l.name }),
+    // By the milestone's id, a parent group's as the project's; 0 takes the
+    // issue out of its own.
+    milestone: (n, m) => (m && m.id === undefined ? Promise.resolve(`no id for ${m.title}`) : put(n, { milestone_id: m?.id ?? 0 })),
   }
 }
 

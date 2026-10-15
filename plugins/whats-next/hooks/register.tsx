@@ -13,7 +13,7 @@ import * as step from './where'
 import { issueOf } from './where'
 import { EPICS_PANE, go, MILESTONES_PANE, milestoneShown, PANE, placeOf } from './panes'
 import { epicsView } from './views/epics'
-import { frame, hidden, labelsShown, views, type Acts, type Pane } from './views/frame'
+import { frame, hidden, listShown, views, type Acts, type Pane } from './views/frame'
 import { helpView } from './views/help'
 import { issueView } from './views/issue'
 import { milestonesView } from './views/milestones'
@@ -469,6 +469,7 @@ async function openUrl($: EngineInterface, url: string) {
 // reads it again with What's next and the epics, so the change shows
 // everywhere. Pane `pane` goes back to its list, unless it `stay`s on the
 // issue; a refusal keeps the issue open there, shown under its actions.
+// `after` goes after the issue's number in the refusal (` to v1.2`).
 async function writeIssue(
   $: EngineInterface,
   pane: string,
@@ -476,13 +477,14 @@ async function writeIssue(
   change: (t: Tracker) => Promise<string | null>,
   what: string,
   stay = false,
+  after = '',
 ): Promise<boolean> {
   const r = await read($, repo)
   const k = known
   if (!r || !k) return false
   const why = await change(k.tracker)
   if (why !== null) {
-    const error = `Could not ${what} #${n}: ${why.replace(/\.$/, '')}.`
+    const error = `Could not ${what} #${n}${after}: ${why.replace(/\.$/, '')}.`
     await update($, memberOf(detail, { requestId: pane }), (d): Detail => (d.kind === 'ok' ? { ...d, error } : d))
     return false
   }
@@ -541,6 +543,23 @@ async function toggleLabels($: EngineInterface, pane: string) {
 // its labels list open for the next.
 const setLabel = ($: EngineInterface, pane: string, i: IssueDetail, l: Label, on: boolean) =>
   writeIssue($, pane, i.number, t => t.label(i.number, l, on), on ? `add ${l.name} to` : `take ${l.name} off`, true)
+
+// The milestone list of pane `pane` opened, or shut (DRAWING-issue.md, The
+// milestone list): the open milestones are known already, so nothing is asked.
+async function toggleMilestones($: EngineInterface, pane: string) {
+  await update($, filterOpen, () => false)
+  await go($, pane, step.toggleMilestones)
+}
+
+// Issue `i` moved to milestone `m`, or out of its own for null; the list
+// shuts and the pane stays on the issue (DRAWING-issue.md, The milestone list).
+async function setMilestone($: EngineInterface, pane: string, i: IssueDetail, m: Milestone | null) {
+  await go($, pane, step.shutMilestones)
+  const from = i.milestone?.title ?? null
+  return m
+    ? writeIssue($, pane, i.number, t => t.milestone(i.number, m), 'move', true, ` to ${m.title}`)
+    : writeIssue($, pane, i.number, t => t.milestone(i.number, null), 'take', true, from ? ` out of ${from}` : ' out of its milestone')
+}
 
 // What a draft is made from: the issue, and its comments when known.
 type DraftSource = Pick<IssueRow, 'number' | 'title' | 'url' | 'body'> & {
@@ -616,14 +635,16 @@ const focusMoved: Hook<'ui.focus'> = async ($, e, next) => {
     return next({ ...e, element: h.first })
   }
   lastFocus.set(e.requestId, e.element)
-  // A label out of the labels list's view scrolls the list, not the detail.
-  const listed = labelsShown.get(e.requestId)
-  const label = /^toggle-label-(\d+)$/.exec(e.element ?? '')
-  if (listed && label) {
-    const k = Number(label[1])
-    const off = (await placeOf($, e.requestId)).labels?.scroll ?? 0
+  // A line out of the labels list's or the milestone list's view scrolls
+  // that list, not the detail.
+  const listed = listShown.get(e.requestId)
+  const line = /^(toggle-label|pick-milestone)-(\d+)$/.exec(e.element ?? '')
+  if (listed && line && (line[1] === 'toggle-label') === (listed.list === 'labels')) {
+    const k = Number(line[2])
+    const place = await placeOf($, e.requestId)
+    const off = (listed.list === 'labels' ? place.labels : place.milestones)?.scroll ?? 0
     const to = k < off ? k : k >= off + listed.room ? k - listed.room + 1 : off
-    if (to !== off) await go($, e.requestId, w => step.scrollLabels(w, to))
+    if (to !== off) await go($, e.requestId, w => (listed.list === 'labels' ? step.scrollLabels(w, to) : step.scrollMilestones(w, to)))
     return next(e)
   }
   const v = views.get(e.requestId)
@@ -698,7 +719,7 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
   // A list draws no detail; the detail below sets its own again.
   views.delete(e.requestId)
   hidden.delete(e.requestId)
-  labelsShown.delete(e.requestId)
+  listShown.delete(e.requestId)
   const id = e.requestId
   const r = await read($, repo)
   const s = await read($, setup)
@@ -731,6 +752,8 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
     writeIssue: (n, change, what) => writeIssue($, id, n, change, what),
     toggleLabels: () => toggleLabels($, id),
     setLabel: (i, l, on) => setLabel($, id, i, l, on),
+    toggleMilestones: () => toggleMilestones($, id),
+    setMilestone: (i, m) => setMilestone($, id, i, m),
     workOn: i => workOn($, i, { pane: id, issue: i }),
     openUrl: url => openUrl($, url),
     counted: (label, action) => counted($, label, action),

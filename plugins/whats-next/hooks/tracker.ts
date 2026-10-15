@@ -103,6 +103,9 @@ export type Tracker = {
   labels(): Promise<Label[]>
   // Label `l` added to issue `n`, or taken off: null when done, else why not.
   label(n: number, l: Label, on: boolean): Promise<string | null>
+  // Issue `n` moved to open milestone `m`, or out of its own for null: null
+  // when done, else why not.
+  milestone(n: number, m: MilestoneRow | null): Promise<string | null>
   // Milestone `m` closed or open again: null when done, else why not.
   closeMilestone(m: MilestoneRow, closed: boolean): Promise<string | null>
 }
