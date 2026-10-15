@@ -294,6 +294,8 @@ most). A line the forge would not answer for is left out, as is an empty
 one, but Labels where the token may change them: there it is a plain
 button, as an Epic line, that opens the labels list, and with no labels
 it reads `none`, dim, so there is something to press (#66, decided 1D).
+Milestone the same, where the token may change it: a plain button that
+opens the milestone list, `none`, dim, without one (#68).
 
 Drawn by: `refLine`, under its key by `keyed`, in `issueView` (hooks/views/issue.tsx).
 
@@ -331,4 +333,35 @@ Typing to narrow the list, as the forges do, is for later (2iv on the
 canvas).
 
 Drawn by: `labelsList` in `issueView` (hooks/views/issue.tsx), in the
+frame's `overlay`.
+
+## The milestone list
+
+From the issue detail, the issue is moved to another milestone, or out of
+its own, in the milestone list (#68). It opens from Milestone in the menu
+(hotkey `m`, as the milestone filter's in a list) and from the Milestone
+line, both only where the token may write, and is drawn, placed, scrolled
+and shut as the labels list: its frame on the Milestone line's row, its
+first line `Milestone`, dim, and `✕`; `m` again, the Milestone line again
+or `☰` shut it too. Opening it shuts the menu and the labels list, and the
+other way round.
+
+Its lines are drawn as the milestone filter's list (decided 2i): the open
+milestones in the filter's order, due first (ORDERING.md), on GitLab a
+parent group's too, then `No milestone`; each name padded to a column, its
+due date in the short form after it, no `⧗` (DRAWING.md, Due dates). The
+issue's own is bold; an issue in a closed milestone has that one first,
+grey and bold, its date dim. Each line is a plain button: Enter moves the
+issue there at once and shuts the list, and the pane stays on the issue
+(decided 3a); Enter on the issue's own only shuts it. The Milestone line,
+What's next, Epics and Milestones show the change at once, the milestone
+counts following, as after Assign Me and Close. The open milestones are
+known already, so opening it asks nothing; until they are, it reads
+`Loading …`. A milestone list the forge refused is no list: only
+`No milestone`.
+
+A refusal is red under the heading: `Could not move #29 to v1.2: 403
+Forbidden.`, `Could not take #29 out of v1.1: 403 Forbidden.`
+
+Drawn by: `milestoneList` in `issueView` (hooks/views/issue.tsx), in the
 frame's `overlay`.

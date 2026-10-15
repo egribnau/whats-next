@@ -70,6 +70,7 @@ free one is blocked.
 | bottom line | The last line of a pane. |
 | menu | `☰` at the right of a pane's top row: what can be done there, each with its hotkey (#62, built 0.68.0). |
 | labels list | The repo's labels, opened over the issue detail from Labels, each with a box saying whether the issue has it (#66). |
+| milestone list | The open milestones and No milestone, opened over the issue detail from Milestone, the issue's own in bold (#68). |
 | help page | The page that says what each sign and colour means, the same in every pane; shown in place of the list or detail, left with Back (#63, built 0.70.0). |
 
 ## Actions
@@ -82,6 +83,7 @@ free one is blocked.
 | Assign Me, Unassign Me | Adds or removes only you as assignee. |
 | Close, Reopen | Closes or reopens the issue or milestone. |
 | Labels | Opens the labels list, where a press adds a label to the issue or takes it off (#66). |
+| Milestone | Opens the milestone list, where a press moves the issue to that milestone, or out of its own (#68). |
 | Open in Browser | Opens the issue's or milestone's page on the forge. |
 | Help | Opens the help page; `/next help` opens it in What's next (#63, built 0.70.0). |
 
@@ -91,7 +93,7 @@ free one is blocked.
 |---|---|
 | setup | The steps checked before the panes show: Repo, Forge, Token, Access, Actions. |
 | token | An access token for the forge, from its token setting only. |
-| read only | What's Next may read but not assign, close or change labels; setup's Actions step says why. |
+| read only | What's Next may read but not assign, close or change labels or milestone; setup's Actions step says why. |
 | Compact, Icons | The settings for how lists and buttons look. |
 
 ## When something is not known

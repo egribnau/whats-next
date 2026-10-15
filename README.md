@@ -10,8 +10,8 @@ GitLab or GitHub.
 - Next: the first available issue, ordered by where you work, its due date
   and how many issues wait on it.
 - Epics and milestones with their progress, folded open on their issues.
-- Assign yourself, close an issue, change its labels, or put it into your
-  prompt, without leaving Claude Code.
+- Assign yourself, close an issue, change its labels or milestone, or put
+  it into your prompt, without leaving Claude Code.
 
 What's Next is a mod: a change to Claude Code's own interface. This repo,
 `claude-mods`, publishes it as the plugin marketplace `egribnau-mods`. The
@@ -47,8 +47,8 @@ directory's `origin`:
 - **Milestone filter**: narrows What's next and Epics to one milestone.
 - **Issue detail**: epic, children, blockers, due date, milestone, labels,
   pull requests, commits, description and comments. Assign yourself, close,
-  reopen, add or take off a label, open in the browser, or put the issue
-  into your prompt.
+  reopen, add or take off a label, move it to another milestone, open in
+  the browser, or put the issue into your prompt.
 - **Help** (`h`): what each sign and colour means.
 
 | Command | Opens |
@@ -78,7 +78,7 @@ directory's `origin`:
 
 A repo on one of these forges, and an access token for it:
 
-| Forge | Token setting | To read | To assign, close and change labels |
+| Forge | Token setting | To read | To assign, close and change labels and milestones |
 | --- | --- | --- | --- |
 | Forgejo or Gitea | Forgejo tokens | `read:issue`, `read:repository`, `read:user` | `write:issue` in place of `read:issue`, and push rights on the repo |
 | gitlab.com | GitLab.com token | `read_api` | `api`, and Reporter or higher on the project |
@@ -92,7 +92,7 @@ are not tested here. On GitLab Free nothing shows as blocked.
 
 Until all is set, the pane walks you through setup: the repo, the forge at
 its host, the token, whether it reads the repo, and whether What's Next may
-assign, close and change labels or is read only.
+assign, close and change labels and milestones or is read only.
 
 A token goes only to the host it is for, and What's Next shows it nowhere.
 It reads tokens only from its own settings: no environment variables, no
