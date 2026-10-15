@@ -389,8 +389,8 @@ test("github.com detail: a refused close says GitHub's message, in red", GH, asy
 })
 
 for (const [why, w, notice] of [
-  ['alice may not push', { push: false }, 'Assign and close need push rights on boats/radar.'],
-  ['a classic token without repo', { scopes: 'read:org' }, "Assign and close need a token with repo: the setup guide's steps make one."],
+  ['alice may not push', { push: false }, 'Assign, close and labels need push rights on boats/radar.'],
+  ['a classic token without repo', { scopes: 'read:org' }, "Assign, close and labels need a token with repo: the setup guide's steps make one."],
 ] as const) {
   test(`github.com read only (${why}): no Assign or Close, one line on how`, GH, async ($, on) => {
     paneWorld(on, { ...w })

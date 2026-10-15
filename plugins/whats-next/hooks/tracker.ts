@@ -1,6 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { EpicChild, Features, IssueDetail, IssueRow, Repo, Setup } from '../types'
+import type { EpicChild, Features, IssueDetail, IssueRow, Label, Repo, Setup } from '../types'
 import type { MilestoneRow } from './epics'
 import type { TokenSetting } from './forge'
 
@@ -98,6 +98,11 @@ export type Tracker = {
   // done, else why not.
   assign(n: number, assignees: string[]): Promise<string | null>
   close(n: number, closed: boolean): Promise<string | null>
+  // The repo's labels, on GitLab its groups' too, by name; throws, naming
+  // what failed, when the forge refuses.
+  labels(): Promise<Label[]>
+  // Label `l` added to issue `n`, or taken off: null when done, else why not.
+  label(n: number, l: Label, on: boolean): Promise<string | null>
   // Milestone `m` closed or open again: null when done, else why not.
   closeMilestone(m: MilestoneRow, closed: boolean): Promise<string | null>
 }

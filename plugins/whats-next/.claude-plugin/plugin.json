@@ -1,6 +1,6 @@
 {
   "name": "whats-next",
-  "version": "1.1.0-pre.1",
+  "version": "1.1.0-pre.2",
   "description": "What's next, epics and milestones from Forgejo, GitLab or GitHub, in docked panes",
   "author": {
     "name": "Erwin Gribnau"
@@ -12,28 +12,28 @@
     "token": {
       "type": "string",
       "title": "Forgejo tokens",
-      "description": "Forgejo or Gitea access tokens, kept in secure storage. A bare token is for every host; more hosts take host=token pairs separated by spaces. A pair wins over a bare token. Needs write:issue, read:repository and read:user to assign and close; read:issue instead of write:issue is read only.",
+      "description": "Forgejo or Gitea access tokens, kept in secure storage. A bare token is for every host; more hosts take host=token pairs separated by spaces. A pair wins over a bare token. Needs write:issue, read:repository and read:user to assign, close and change labels; read:issue instead of write:issue is read only.",
       "default": "",
       "sensitive": true
     },
     "gitlabComToken": {
       "type": "string",
       "title": "GitLab.com token",
-      "description": "A gitlab.com access token, kept in secure storage. api lets What's Next assign and close; read_api is read only.",
+      "description": "A gitlab.com access token, kept in secure storage. api lets What's Next assign, close and change labels; read_api is read only.",
       "default": "",
       "sensitive": true
     },
     "gitlabTokens": {
       "type": "string",
       "title": "Private GitLab token",
-      "description": "An access token for your own GitLab, any host but gitlab.com, kept in secure storage. api lets What's Next assign and close; read_api is read only. host=token pairs separated by spaces still work for more than one host.",
+      "description": "An access token for your own GitLab, any host but gitlab.com, kept in secure storage. api lets What's Next assign, close and change labels; read_api is read only. host=token pairs separated by spaces still work for more than one host.",
       "default": "",
       "sensitive": true
     },
     "githubTokens": {
       "type": "string",
       "title": "GitHub token",
-      "description": "A GitHub access token, for github.com and GitHub Enterprise, kept in secure storage. Fine-grained: Issues read and write to assign and close, read for read only; classic: repo. host=token pairs separated by spaces for more than one host; a pair wins over a bare token.",
+      "description": "A GitHub access token, for github.com and GitHub Enterprise, kept in secure storage. Fine-grained: Issues read and write to assign, close and change labels, read for read only; classic: repo. host=token pairs separated by spaces for more than one host; a pair wins over a bare token.",
       "default": "",
       "sensitive": true
     },

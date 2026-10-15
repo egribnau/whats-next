@@ -161,7 +161,21 @@ export type Page =
   | { kind: 'list' }
   | { kind: 'milestone'; title: string }
   | { kind: 'issue'; number: number; trail: number[]; folds: DetailFolds; milestone: string | null }
-export type Where = { page: Page; scroll: number; menu: boolean; help: { scroll: number } | null }
+// `labels`: whether the issue detail's labels list is open, and how far
+// it is scrolled, in rows (DRAWING-issue.md, The labels list).
+export type Where = { page: Page; scroll: number; menu: boolean; help: { scroll: number } | null; labels?: { scroll: number } | null }
+
+// A label of the repo, as the labels list offers it: its forge colour, and
+// on Forgejo its id, which Forgejo adds and takes off by.
+export type Label = { name: string; color: string; id?: number }
+
+// The repo's labels for the labels list: asked once it opens, kept until
+// Refresh. `repo` is the repo they are of.
+export type RepoLabels =
+  | { kind: 'idle' }
+  | { kind: 'loading'; repo: string }
+  | { kind: 'ok'; repo: string; labels: Label[] }
+  | { kind: 'error'; repo: string; message: string }
 
 export type Detail =
   | { kind: 'idle' }
@@ -283,6 +297,8 @@ declare module 'claude-code' {
       filterShown: FilterShown | null
       // Whether the milestone filter's list is open.
       filterOpen: boolean
+      // The repo's labels, for the issue detail's labels list.
+      repoLabels: RepoLabels
       // With Debug on: the last action, the requests it sent the forge, and
       // the requests of the session so far.
       requests: { label: string; count: number; total: number } | null

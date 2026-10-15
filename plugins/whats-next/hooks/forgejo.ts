@@ -1,4 +1,4 @@
-import type { Actions, CommitRef, EpicChild, Features, IssueDetail, IssueRow, Ref, Repo, Setup } from '../types'
+import type { Actions, CommitRef, EpicChild, Features, IssueDetail, IssueRow, Label, Ref, Repo, Setup } from '../types'
 import type { MilestoneRow } from './epics'
 import { forgeName } from './forge'
 import { fetchJson, message, type Checked, type Closed, type EpicRow, type OpenIssue, type Send, type Tracker } from './tracker'
@@ -70,12 +70,13 @@ export function forgejo(send: Send, r: Repo, token: string | null, label: string
   // A change to issue `n`: null when Forgejo took it, else why not.
   const patch = (n: number, body: object) => patchAt(`${api}/issues/${n}`, body)
 
-  // A change at `url`: null when Forgejo took it, else why not.
-  async function patchAt(url: string, body: object): Promise<string | null> {
+  // A change at `url`, PATCH unless `method` says otherwise; DELETE sends
+  // no body. null when Forgejo took it, else why not.
+  async function patchAt(url: string, body: object | null, method = 'PATCH'): Promise<string | null> {
     const res = await send(url, {
-      method: 'PATCH',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      method,
+      headers: body ? { ...headers, 'Content-Type': 'application/json' } : headers,
+      ...(body ? { body: JSON.stringify(body) } : {}),
     }).catch((err: unknown) => message(err))
     if (typeof res !== 'string' && res.ok) return null
     let why = typeof res === 'string' ? res : `HTTP ${res.status}`
@@ -297,6 +298,18 @@ export function forgejo(send: Send, r: Repo, token: string | null, label: string
     assign: (n, assignees) => patch(n, { assignees }),
     close: (n, closed) => patch(n, { state: closed ? 'closed' : 'open' }),
     closeMilestone: (m, closed) => patchAt(`${api}/milestones/${m.id}`, { state: closed ? 'closed' : 'open' }),
+
+    async labels(): Promise<Label[]> {
+      const raw = await fetchAll<{ id: number; name: string; color?: string }>(`${api}/labels?sort=name`, 'labels')
+      return raw.map(l => ({ name: l.name, color: l.color ?? '', id: l.id }))
+    },
+    // Forgejo adds and takes off a label by its id.
+    label: (n, l, on) =>
+      l.id === undefined
+        ? Promise.resolve(`no id for ${l.name}`)
+        : on
+          ? patchAt(`${api}/issues/${n}/labels`, { labels: [l.id] }, 'POST')
+          : patchAt(`${api}/issues/${n}/labels/${l.id}`, null, 'DELETE'),
   }
 }
 

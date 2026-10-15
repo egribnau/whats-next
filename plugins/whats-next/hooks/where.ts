@@ -22,8 +22,9 @@ export const milestoneOf = (w: Where): string | null =>
 // What is folded in the issue detail shown.
 export const foldsOf = (w: Where): DetailFolds => (w.page.kind === 'issue' ? w.page.folds : FOLDED)
 
-// A page shown as its rules say: at its top, its menu shut. Help is left as it is.
-const fresh = (w: Where, page: Page): Where => ({ ...w, page, scroll: 0, menu: false })
+// A page shown as its rules say: at its top, its menu and labels list shut.
+// Help is left as it is.
+const fresh = (w: Where, page: Page): Where => ({ ...w, page, scroll: 0, menu: false, labels: null })
 
 // Issue `n` from the list, or from the milestone detail the pane has open.
 export const open = (w: Where, n: number): Where =>
@@ -68,13 +69,21 @@ export const fold = (w: Where, change: (f: DetailFolds) => DetailFolds): Where =
 // The page scrolled to row `to`.
 export const scrollTo = (w: Where, to: number): Where => ({ ...w, scroll: to })
 
-// The menu opened if shut, shut if open; and shut.
-export const toggleMenu = (w: Where): Where => ({ ...w, menu: !w.menu })
+// The menu opened if shut, shut if open; and shut. It shuts the labels list.
+export const toggleMenu = (w: Where): Where => ({ ...w, menu: !w.menu, labels: null })
 export const shutMenu = (w: Where): Where => ({ ...w, menu: false })
+
+// The issue detail's labels list opened at its top if shut, shut if open;
+// it shuts the menu (DRAWING-issue.md, The labels list).
+export const toggleLabels = (w: Where): Where =>
+  w.page.kind !== 'issue' ? w : { ...w, menu: false, labels: w.labels ? null : { scroll: 0 } }
+
+// The labels list scrolled to row `to`.
+export const scrollLabels = (w: Where, to: number): Where => (w.labels ? { ...w, labels: { scroll: to } } : w)
 
 // The help page over what is shown, at its top; the scroll that page had is
 // kept for Back. Opened already, nothing changes.
-export const help = (w: Where): Where => (w.help ? w : { ...w, help: { scroll: w.scroll }, menu: false, scroll: 0 })
+export const help = (w: Where): Where => (w.help ? w : { ...w, help: { scroll: w.scroll }, menu: false, labels: null, scroll: 0 })
 
 // Back from the help page: what it was opened over, as it was.
 export const leaveHelp = (w: Where): Where => ({ ...w, help: null, menu: false, scroll: w.help?.scroll ?? 0 })

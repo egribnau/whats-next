@@ -88,6 +88,8 @@ export const HELP: readonly HelpSection[] = [
       { sign: text('[ ☰ ]'), words: 'menu: actions and their hotkeys' },
       { sign: text('[ ← ]'), words: 'Back: returns to where you were' },
       { sign: text('All ▾'), words: 'milestone filter' },
+      { sign: text('☑ ☐'), words: 'labels list: a label the issue has, or not' },
+      { sign: text('✕'), words: 'shuts the labels list' },
     ],
   },
 ]

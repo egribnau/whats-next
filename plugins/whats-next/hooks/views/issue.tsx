@@ -1,7 +1,7 @@
 import { atom, memberOf, read } from 'claude-code'
 import type { EngineInterface, RenderChildren } from 'claude-code'
 
-import type { Comment, DetailFolds, Ref, Repo } from '../../types'
+import type { Comment, DetailFolds, IssueDetail, Label, Ref, Repo, RepoLabels } from '../../types'
 import { age, CLOSED_MARK, fit, FOLD_AT, ICON, whoOf } from '../draw'
 import { isMine, markOf, standing, type Mark, type Standing } from '../epics'
 import { duration, wrap } from '../issue'
@@ -9,11 +9,12 @@ import { slug } from '../tracker'
 import * as step from '../where'
 import { foldsOf } from '../where'
 import { go } from '../panes'
-import type { Action, Frame, Pane } from './frame'
+import { labelsShown, type Action, type Frame, type Pane } from './frame'
 
 // The state this view reads (the contract in types/index.d.ts).
 const setup = atom({ plugin: 'whats-next', key: 'setup' } as const, { kind: 'checking' })
 const detail = atom({ plugin: 'whats-next', key: 'detail' } as const, { kind: 'idle' })
+const repoLabels = atom({ plugin: 'whats-next', key: 'repoLabels' } as const, { kind: 'idle' })
 
 // The issue detail (DRAWING-issue.md), in place of the list: issue `open`
 // of repo `r`, as read from the forge.
@@ -37,8 +38,14 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
   let prompt: RenderChildren = null
   if (dt.kind === 'loading' || dt.kind === 'idle') body.push(d.line('loading', `Loading #${open}…`, { dimColor: true }))
   if (dt.kind === 'error') body.push(...lines('error', `Could not load #${dt.number}: ${dt.message}.`, { color: 'error' }))
+  let over: RenderChildren = null
+  let shownLabels: { issue: IssueDetail; known: RepoLabels; scroll: number } | null = null
+  labelsShown.delete(id)
   if (dt.kind === 'ok') {
     const i = dt.issue
+    // Assign, close and labels, when What's Next may: setup's Actions step says so.
+    const allowed = s.kind === 'ready' ? s.actions : ({ kind: 'read-only', reason: 'scope' } as const)
+    const canAct = allowed.kind !== 'read-only'
     // Every key of the detail in one gutter, as wide as the longest, Blocked by.
     const KEY = 11
     const keyed = (key: string, label: string, content: RenderChildren) => (
@@ -130,7 +137,21 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     if (i.milestone) {
       facts.push(keyed('milestone', 'Milestone', d.partsLine('milestone-parts', 0, [{ text: i.milestone.title }, ...d.duePart('milestone-due', i.milestone.due, now, { form: 'short' })])))
     }
-    if (i.labels.length > 0) facts.push(keyed('labels', 'Labels', <Text wrap="truncate-end">{d.labelTexts(i.labels)}</Text>))
+    // Where the token may change them, the Labels line opens the labels
+    // list, and stays with none (DRAWING-issue.md, The labels list).
+    const labelsText =
+      i.labels.length > 0 ? <Text wrap="truncate-end">{d.labelTexts(i.labels)}</Text> : <Text dimColor>none</Text>
+    if (canAct) {
+      facts.push(
+        keyed(
+          'labels',
+          'Labels',
+          <Button key="labels-line" plain onPress={acts.toggleLabels}>
+            {labelsText}
+          </Button>,
+        ),
+      )
+    } else if (i.labels.length > 0) facts.push(keyed('labels', 'Labels', labelsText))
     if (i.branch) facts.push(keyed('branch', 'Branch', <Text>{i.branch}</Text>))
     const time = i.logged
       ? `${duration(i.logged)} logged${i.estimate ? ` of ${duration(i.estimate)} estimated` : ''}`
@@ -157,9 +178,6 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
       )
     })
 
-    // Assign and close, when What's Next may: setup's Actions step says so.
-    const allowed = s.kind === 'ready' ? s.actions : ({ kind: 'read-only', reason: 'scope' } as const)
-    const canAct = allowed.kind !== 'read-only'
     const me = known?.me ?? null
     const mine = isMine(i.assignees, me)
     const closed = i.state === 'closed'
@@ -193,6 +211,7 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
                   acts.writeIssue(i.number, tr => tr.close(i.number, !closed), closed ? 'reopen' : 'close'),
                 ),
             },
+            { key: 'labels', label: 'Labels', hotkey: 'l', onPress: acts.toggleLabels },
           ]
         : []),
       { key: 'open', label: 'Open in Browser', hotkey: 'o', onPress: () => acts.openUrl(i.url) },
@@ -202,10 +221,11 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     note = canAct
       ? undefined
       : allowed.kind === 'read-only' && allowed.reason === 'role'
-        ? `Assign and close need Reporter or higher on ${slug(r)}.`
+        ? `Assign, close and labels need Reporter or higher on ${slug(r)}.`
         : allowed.kind === 'read-only' && allowed.reason === 'push'
-          ? `Assign and close need push rights on ${slug(r)}.`
-          : `Assign and close need a token with ${t?.writeScope ?? 'write:issue'}: the setup guide's steps make one.`
+          ? `Assign, close and labels need push rights on ${slug(r)}.`
+          : `Assign, close and labels need a token with ${t?.writeScope ?? 'write:issue'}: the setup guide's steps make one.`
+    if (canAct && p.place.labels) shownLabels = { issue: i, known: await read($, repoLabels), scroll: p.place.labels.scroll }
     prompt = <Button key="prompt" label={d.say(ICON.work, 'Prompt')} hotkey="p" onPress={() => acts.workOn(i)} />
 
     // Closed: grey as a whole, number and title; blocked: the title dim.
@@ -299,6 +319,71 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
       })
     }
   }
-  // [ ← ] and the menu, with Prompt before it once the issue is read.
-  return f.detailFrame(f.detailTop(actions, acts.goBack, prompt), body, f.menuLines(actions, note))
+  // [ ← ] and the menu, with Prompt before it once the issue is read; the
+  // labels list over the rows when it is open, else the menu.
+  const top = f.detailTop(actions, acts.goBack, prompt)
+  if (shownLabels) {
+    // Its frame on the Labels line's row, else under the top row.
+    const at = f.rowOf(top, body, 'labels-line')
+    over = labelsList(shownLabels.issue, shownLabels.known, shownLabels.scroll, at ?? 1)
+  }
+  return f.detailFrame(top, body, over ?? f.menuLines(actions, note))
+
+  // The labels list (DRAWING-issue.md, The labels list): the repo's labels,
+  // each after a box that says whether issue `i` has it; a press adds it or
+  // takes it off. Its lines are cut to the pane, scrolled by `scroll`.
+  // `want`: the pane row it starts on where it fits below there; where it
+  // does not, it moves up as far as it must, to under the top row at most.
+  function labelsList(i: IssueDetail, known: RepoLabels, scroll: number, want: number): RenderChildren {
+    const counted = p.requests ? 1 : 0
+    const startAt = (lines: number) => Math.max(1, Math.min(want, p.height - counted - lines - 3))
+    const said = (key: string, text: string, props: Record<string, unknown>) => [
+      <Box key={key} height={1} flexShrink={0}>
+        <Text {...props}>{text}</Text>
+      </Box>,
+    ]
+    // Its first line: Labels, dim, and ✕ at the right, which shuts it; it
+    // stays when the labels scroll.
+    const head = (width: number) => (
+      <Box key="labels-head" height={1} flexShrink={0}>
+        <Text dimColor>{fit('Labels', width - 2).padEnd(width - 1)}</Text>
+        <Button key="labels-shut" plain onPress={acts.toggleLabels}>
+          <Text>✕</Text>
+        </Button>
+      </Box>
+    )
+    if (known.kind === 'ok' && known.labels.length > 0) {
+      const has = new Set(i.labels.map(l => l.name))
+      const width = Math.min(columns - 2, Math.max(8, ...known.labels.map(l => l.name.length + 2)))
+      const lines = known.labels.map((l: Label, k) => {
+        const on = has.has(l.name)
+        const name = fit(l.name, width - 2)
+        return (
+          <Box key={`label-line-${k}`} height={1} flexShrink={0}>
+            <Button key={`toggle-label-${k}`} plain onPress={() => acts.counted(`${on ? 'take off' : 'add'} ${l.name}`, () => acts.setLabel(i, l, !on))}>
+              <Text>
+                {on ? '☑ ' : '☐ '}
+                {d.labelTexts([{ name, color: l.color }])}
+                {' '.repeat(Math.max(0, width - 2 - name.length))}
+              </Text>
+            </Button>
+          </Box>
+        )
+      })
+      const at = startAt(lines.length)
+      labelsShown.set(id, { lines: lines.length, room: f.overlayRoom(at) - 1 })
+      return f.overlay('labels-list', width, lines, scroll, head(width), at)
+    }
+    const text =
+      known.kind === 'ok' ? `No labels in ${slug(r)}.` : known.kind === 'error' ? `Could not load the labels: ${known.message}.` : 'Loading …'
+    const width = Math.min(columns - 2, Math.max(8, text.length))
+    return f.overlay(
+      'labels-list',
+      width,
+      said('labels-said', fit(text, width).padEnd(width), known.kind === 'error' ? { color: 'error' } : { dimColor: true }),
+      undefined,
+      head(width),
+      startAt(1),
+    )
+  }
 }

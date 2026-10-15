@@ -190,6 +190,41 @@ test('Close: a refusal that echoes the request shows without the token', GH, asy
   noToken([...said, refusal])
 })
 
+test('Labels: a refused labels list that echoes the request shows without the token', GH, async ($, on) => {
+  const said = world(on, {
+    answers: {
+      '/repos/boats/radar/labels': (url, h) => json(500, { message: echo(url, h) }),
+    },
+  })
+  const ui = await shown($)
+  await ui.press({ key: 'pick-14' })
+  await ui.press({ key: 'labels' })
+  const all = await texts(ui)
+  said.push(...all)
+  expect(all.some(t => t.startsWith('Could not load the labels'))).toBe(true)
+  noToken(said)
+})
+
+test('Labels: a label named after the token, and a refused add that echoes the request, show without the token', GH, async ($, on) => {
+  const said = world(on, {
+    answers: {
+      '/repos/boats/radar/labels': () => json(200, [{ id: 1, name: `rotate-${TOKEN}`, color: 'd73a4a' }]),
+      '/repos/boats/radar/issues/14/labels': (url, h, method) => (method === 'POST' ? json(422, { message: echo(url, h) }) : null),
+    },
+  })
+  const ui = await shown($)
+  await ui.press({ key: 'pick-14' })
+  await ui.press({ key: 'labels' })
+  said.push(...(await texts(ui)))
+  await ui.press({ key: 'toggle-label-0' })
+  const red = ((await ui.findAll({ type: 'Text' })) as { text: string; props: Record<string, unknown> }[]).filter(t => t.props.color === 'error')
+  const refusal = red.map(t => t.text).join(' ')
+  expect(refusal.startsWith('Could not add rotate-<token> to #14')).toBe(true)
+  expect(refusal).toContain('Bearer <token>')
+  said.push(...(await texts(ui)))
+  noToken([...said, refusal])
+})
+
 test('Last closed: an issue whose title names the token, and the requests for where you work, carry no token', GH, async ($, on) => {
   const closed = { ...issue(41, `Rotate ${TOKEN}`), state: 'closed', closed_at: '2026-10-09T10:00:00Z' }
   const asked: { url: string; headers: Record<string, string> }[] = []

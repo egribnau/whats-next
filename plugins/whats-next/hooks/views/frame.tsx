@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, RenderChildren, RenderInput } from 'claude-code'
 
-import type { IssueDetail, Milestone, MilestoneFilter, Where } from '../../types'
+import type { IssueDetail, Label, Milestone, MilestoneFilter, Where } from '../../types'
 import type { Draw, Look, Requests } from '../draw'
 import { fit } from '../draw'
 import { filterKey, sameFilter } from '../filter'
@@ -30,6 +30,11 @@ export const views = new Map<string, { rows: number; room: number; at: Map<strin
 // is shut (DRAWING.md, The menu), and the first control drawn after them.
 export const hidden = new Map<string, { keys: Set<string>; first: string }>()
 
+// The issue detail's labels list as last drawn in each pane, by pane id: how
+// many of its lines show, for the focus to scroll it (DRAWING-issue.md, The
+// labels list). A pane without the list open has none.
+export const labelsShown = new Map<string, { lines: number; room: number }>()
+
 // What a press does, for the views: each changes what the panes show, so
 // none of it is done while drawing.
 export type Acts = {
@@ -46,6 +51,8 @@ export type Acts = {
   closeMilestone: (m: Milestone, closed: boolean) => Promise<unknown>
   assignMe: (i: IssueDetail, on: boolean) => Promise<boolean>
   writeIssue: (n: number, change: (t: Tracker) => Promise<string | null>, what: string) => Promise<boolean>
+  toggleLabels: () => unknown
+  setLabel: (i: IssueDetail, l: Label, on: boolean) => Promise<boolean>
   workOn: (i: IssueDetail) => unknown
   openUrl: (url: string) => unknown
   counted: <T>(label: string, action: () => Promise<T>) => Promise<T>
@@ -107,35 +114,69 @@ export async function frame($: EngineInterface, p: Pane) {
     await a.onPress()
   }
   // [ ☰ ] at the right of a top row; it shuts the milestone filter's list,
-  // as that shuts the menu: one list under the top row at a time.
+  // as that shuts the menu: one list under the top row at a time. With the
+  // labels list open it shuts that list alone.
   const menuButton = (
     <Button
       key="menu"
       label="☰"
       onPress={async () => {
         await update($, filterOpen, () => false)
-        await go($, id, step.toggleMenu)
+        await go($, id, w => (w.labels ? step.toggleLabels(w) : step.toggleMenu(w)))
       }}
     />
   )
-  // A list opened under the top row at its right, the menu's or the
-  // milestone filter's: drawn over the rows beneath, which stay where they
-  // are, in a dim frame. `width` is its lines', each padded to it so it
-  // covers what is under it. The last child of the pane, so it is painted last.
-  const overlay = (key: string, width: number, lines: RenderChildren[]) => (
-    <Box
-      key={key}
-      position="absolute"
-      top={1}
-      left={Math.max(0, columns - width - 2)}
-      width={Math.min(columns, width + 2)}
-      flexDirection="column"
-      borderStyle="single"
-      borderDimColor
-    >
-      {lines}
-    </Box>
-  )
+  // A list opened under the top row at its right, the menu's, the
+  // milestone filter's or the labels list: drawn over the rows beneath,
+  // which stay where they are, in a dim frame. `width` is its lines', each
+  // padded to it so it covers what is under it. The last child of the pane,
+  // so it is painted last. `scroll`: a list that may run past the pane is
+  // cut to it, moved up by that many lines, as a detail's rows are. `head`:
+  // a line above them that stays when they scroll. `top`: the pane row its
+  // frame starts on, under the top row unless it says otherwise.
+  const overlay = (key: string, width: number, lines: RenderChildren[], scroll?: number, head: RenderChildren = null, top = 1) => {
+    const room = overlayRoom(top) - (head ? 1 : 0)
+    const cut = scroll !== undefined && lines.length > room
+    return (
+      <Box
+        key={key}
+        position="absolute"
+        top={top}
+        left={Math.max(0, columns - width - 2)}
+        width={Math.min(columns, width + 2)}
+        flexDirection="column"
+        borderStyle="single"
+        borderDimColor
+      >
+        {head}
+        {cut ? (
+          <Box key={`${key}-room`} height={room} flexShrink={0} flexDirection="column" overflow="hidden">
+            <Box key={`${key}-lines`} marginTop={-Math.min(scroll, lines.length - room)} height={lines.length} flexShrink={0} flexDirection="column">
+              {lines}
+            </Box>
+          </Box>
+        ) : (
+          lines
+        )}
+      </Box>
+    )
+  }
+  // How many lines a list cut by `overlay` shows, its head line included,
+  // its frame starting on pane row `top`.
+  function overlayRoom(top = 1) {
+    return Math.max(2, height - top - 2 - (counter ? 1 : 0))
+  }
+  // The pane row a detail's control `key` is drawn on, below top row `top`
+  // and scrolled as `detailFrame` scrolls it; null when it is not drawn.
+  const rowOf = (top: RenderChildren, body: RenderChildren[], key: string): number | null => {
+    const shown = measure(body)
+    const at = shown.at.get(key)
+    if (at === undefined) return null
+    const above = measure(top).rows + 1
+    const room = Math.max(1, height - above - 2 - (counter ? 1 : 0))
+    const offset = Math.min(Math.max(0, shown.rows - room), p.place.scroll)
+    return above + at - offset
+  }
   // The menu open: each action's words and, dim at the right, its hotkey;
   // `note`, dim under them, says what it lacks.
   const MENU = 17
@@ -296,5 +337,5 @@ export async function frame($: EngineInterface, p: Pane) {
       {action && <Button key="refresh" label={action.label} hotkey="r" onPress={acts.refresh} />}
     </Box>
   )
-  return { refreshAction, helpAction, menuLines, titleRow, listOverlay, listFrame, detailFrame, detailTop, heading }
+  return { refreshAction, helpAction, menuLines, overlay, overlayRoom, rowOf, titleRow, listOverlay, listFrame, detailFrame, detailTop, heading }
 }

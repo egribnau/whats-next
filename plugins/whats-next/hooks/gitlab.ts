@@ -1,4 +1,4 @@
-import type { Actions, EpicChild, Features, IssueDetail, IssueRow, Ref, Repo, Setup } from '../types'
+import type { Actions, EpicChild, Features, IssueDetail, IssueRow, Label, Ref, Repo, Setup } from '../types'
 import type { MilestoneRow } from './epics'
 import { forgeName, gitlabSetting } from './forge'
 import { fetchJson, message, type Checked, type Closed, type EpicRow, type OpenIssue, type Send, type Tracker } from './tracker'
@@ -401,6 +401,14 @@ export function gitlab(send: Send, r: Repo, token: string | null, known: string 
         ? why
         : `it belongs to the group ${m.group}, and your token may not change it`
     },
+
+    // The project's labels and its groups'.
+    async labels(): Promise<Label[]> {
+      const raw = await fetchAll<{ name: string; color?: string }>(`${project}/labels?include_ancestor_groups=true`, 'labels')
+      return raw.map(l => ({ name: l.name, color: (l.color ?? '').replace(/^#/, '') }))
+    },
+    // By name, leaving the issue's other labels as they are.
+    label: (n, l, on) => put(n, on ? { add_labels: l.name } : { remove_labels: l.name }),
   }
 }
 

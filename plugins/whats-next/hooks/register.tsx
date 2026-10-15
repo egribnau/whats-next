@@ -1,7 +1,7 @@
 import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, Hook, Register, RenderInput } from 'claude-code'
 
-import type { Comment, Detail, Epic, Epics, IssueDetail, IssueRow, Milestone, MilestoneFilter, Overview, Ref, Repo, Setup, TokenSource } from '../types'
+import type { Comment, Detail, Epic, Epics, IssueDetail, IssueRow, Label, Milestone, MilestoneFilter, Overview, Ref, Repo, RepoLabels, Setup, TokenSource } from '../types'
 import { draw, type Look } from './draw'
 import { inMilestone } from './epics'
 import { configureCommand, type Forge, type TokenSetting } from './forge'
@@ -13,7 +13,7 @@ import * as step from './where'
 import { issueOf } from './where'
 import { EPICS_PANE, go, MILESTONES_PANE, milestoneShown, PANE, placeOf } from './panes'
 import { epicsView } from './views/epics'
-import { frame, hidden, views, type Acts, type Pane } from './views/frame'
+import { frame, hidden, labelsShown, views, type Acts, type Pane } from './views/frame'
 import { helpView } from './views/help'
 import { issueView } from './views/issue'
 import { milestonesView } from './views/milestones'
@@ -48,6 +48,7 @@ const panesOpen = atom({ plugin: 'whats-next', key: 'panesOpen' } as const, [])
 const filterChosen = atom({ plugin: 'whats-next', key: 'filterChosen' } as const, null)
 const filterShown = atom({ plugin: 'whats-next', key: 'filterShown' } as const, null)
 const filterOpen = atom({ plugin: 'whats-next', key: 'filterOpen' } as const, false)
+const repoLabels = atom({ plugin: 'whats-next', key: 'repoLabels' } as const, { kind: 'idle' })
 const requests = atom({ plugin: 'whats-next', key: 'requests' } as const, null)
 
 // Every request What's Next sends the forge, counted, so Debug can say what each action cost.
@@ -313,7 +314,9 @@ async function setFilter($: EngineInterface, filter: MilestoneFilter, label: str
 const issuesRead = new Map<string, IssueDetail>()
 
 // Reads issue `n` for the detail view of pane `pane`, or shows it from memory.
-async function loadDetail($: EngineInterface, r: Repo, pane: string, n: number) {
+// `quiet`: the detail shown stays until the new one is read, with no
+// Loading … between, as after a label's change with the labels list open.
+async function loadDetail($: EngineInterface, r: Repo, pane: string, n: number, quiet = false) {
   const k = known
   if (!k) return
   const key = `${r.host}/${slug(r)}#${n}`
@@ -334,7 +337,7 @@ async function loadDetail($: EngineInterface, r: Repo, pane: string, n: number) 
     await update($, memberOf(detail, { requestId: pane }), (): Detail => ({ kind: 'ok', issue: cached, parent, blocked, children }))
     return
   }
-  await update($, memberOf(detail, { requestId: pane }), (): Detail => ({ kind: 'loading', number: n }))
+  if (!quiet) await update($, memberOf(detail, { requestId: pane }), (): Detail => ({ kind: 'loading', number: n }))
   try {
     const [issue, parent, children] = await Promise.all([k.issue(n), parentOf(), childrenOf()])
     const blocked = await blockedOf(issue)
@@ -400,6 +403,7 @@ async function backToList($: EngineInterface, pane: string) {
 // opens them itself, in its own order, once What's next is placed.
 async function refresh($: EngineInterface, follow = true): Promise<Repo | null> {
   issuesRead.clear()
+  await update($, repoLabels, (): RepoLabels => ({ kind: 'idle' }))
   const r = await check($)
   if (r && (await read($, setup)).kind === 'ready') {
     const before = await read($, epics)
@@ -414,6 +418,13 @@ async function refresh($: EngineInterface, follow = true): Promise<Repo | null> 
       const n = issueOf(await placeOf($, pane))
       if (n !== null) await loadDetail($, r, pane, n)
       else await update($, memberOf(detail, { requestId: pane }), (): Detail => ({ kind: 'idle' }))
+    }
+    // A labels list open is asked for again.
+    for (const pane of [PANE, EPICS_PANE, MILESTONES_PANE]) {
+      if ((await placeOf($, pane)).labels) {
+        await loadLabels($)
+        break
+      }
     }
   } else {
     await update($, overview, (): Overview => ({ kind: 'idle' }))
@@ -456,14 +467,15 @@ async function openUrl($: EngineInterface, url: string) {
 
 // Changes issue `n` with `change` (`what` names it for a refusal), then
 // reads it again with What's next and the epics, so the change shows
-// everywhere. Pane `pane` goes back to its list; a refusal keeps the issue
-// open there, shown under its actions.
+// everywhere. Pane `pane` goes back to its list, unless it `stay`s on the
+// issue; a refusal keeps the issue open there, shown under its actions.
 async function writeIssue(
   $: EngineInterface,
   pane: string,
   n: number,
   change: (t: Tracker) => Promise<string | null>,
   what: string,
+  stay = false,
 ): Promise<boolean> {
   const r = await read($, repo)
   const k = known
@@ -476,9 +488,9 @@ async function writeIssue(
   }
   const key = `${r.host}/${slug(r)}#${n}`
   issuesRead.delete(key)
-  await backToList($, pane)
+  if (!stay) await backToList($, pane)
   for (const p of [PANE, EPICS_PANE, MILESTONES_PANE]) {
-    if (issueOf(await placeOf($, p)) === n) await loadDetail($, r, p, n)
+    if (issueOf(await placeOf($, p)) === n) await loadDetail($, r, p, n, stay && p === pane)
   }
   // The issue as the change left it, read again unless a pane just did, so
   // the lists show the change even where the forge's lists lag it.
@@ -496,6 +508,39 @@ async function assignMe($: EngineInterface, pane: string, i: IssueDetail, on: bo
   const assignees = on ? [...others, me] : others
   return writeIssue($, pane, i.number, t => t.assign(i.number, assignees), on ? 'assign' : 'unassign')
 }
+
+// The repo's labels for the labels list, by name, read once until Refresh.
+async function loadLabels($: EngineInterface) {
+  const r = await read($, repo)
+  const k = known
+  if (!r || !k) return
+  const at = `${r.host}/${slug(r)}`
+  await update($, repoLabels, (): RepoLabels => ({ kind: 'loading', repo: at }))
+  try {
+    const all = await k.tracker.labels()
+    const labels = [...all].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+    await update($, repoLabels, (): RepoLabels => ({ kind: 'ok', repo: at, labels }))
+  } catch (err) {
+    await update($, repoLabels, (): RepoLabels => ({ kind: 'error', repo: at, message: message(err) }))
+  }
+}
+
+// The labels list of pane `pane` opened, or shut; opened, the repo's labels
+// are asked for unless they are known (DRAWING-issue.md, The labels list).
+async function toggleLabels($: EngineInterface, pane: string) {
+  await update($, filterOpen, () => false)
+  await go($, pane, step.toggleLabels)
+  if (!(await placeOf($, pane)).labels) return
+  const r = await read($, repo)
+  const had = await read($, repoLabels)
+  if (r && (had.kind === 'ok' || had.kind === 'loading') && had.repo === `${r.host}/${slug(r)}`) return
+  await counted($, 'Labels', () => loadLabels($))
+}
+
+// Label `l` added to issue `i`, or taken off; the pane stays on the issue,
+// its labels list open for the next.
+const setLabel = ($: EngineInterface, pane: string, i: IssueDetail, l: Label, on: boolean) =>
+  writeIssue($, pane, i.number, t => t.label(i.number, l, on), on ? `add ${l.name} to` : `take ${l.name} off`, true)
 
 // What a draft is made from: the issue, and its comments when known.
 type DraftSource = Pick<IssueRow, 'number' | 'title' | 'url' | 'body'> & {
@@ -571,6 +616,16 @@ const focusMoved: Hook<'ui.focus'> = async ($, e, next) => {
     return next({ ...e, element: h.first })
   }
   lastFocus.set(e.requestId, e.element)
+  // A label out of the labels list's view scrolls the list, not the detail.
+  const listed = labelsShown.get(e.requestId)
+  const label = /^toggle-label-(\d+)$/.exec(e.element ?? '')
+  if (listed && label) {
+    const k = Number(label[1])
+    const off = (await placeOf($, e.requestId)).labels?.scroll ?? 0
+    const to = k < off ? k : k >= off + listed.room ? k - listed.room + 1 : off
+    if (to !== off) await go($, e.requestId, w => step.scrollLabels(w, to))
+    return next(e)
+  }
   const v = views.get(e.requestId)
   const row = e.element === undefined ? undefined : v?.at.get(e.element)
   if (v && row !== undefined) {
@@ -643,6 +698,7 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
   // A list draws no detail; the detail below sets its own again.
   views.delete(e.requestId)
   hidden.delete(e.requestId)
+  labelsShown.delete(e.requestId)
   const id = e.requestId
   const r = await read($, repo)
   const s = await read($, setup)
@@ -673,6 +729,8 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
     closeMilestone: (ms, closed) => closeMilestone($, ms, closed),
     assignMe: (i, on) => assignMe($, id, i, on),
     writeIssue: (n, change, what) => writeIssue($, id, n, change, what),
+    toggleLabels: () => toggleLabels($, id),
+    setLabel: (i, l, on) => setLabel($, id, i, l, on),
     workOn: i => workOn($, i, { pane: id, issue: i }),
     openUrl: url => openUrl($, url),
     counted: (label, action) => counted($, label, action),

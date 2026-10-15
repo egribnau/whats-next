@@ -780,13 +780,13 @@ for (const [why, w, step, notice] of [
     'the token has read_api only',
     { scopes: ['read_api', 'read_user'] },
     '· Actions read only, token lacks api',
-    "Assign and close need a token with api: the setup guide's steps make one.",
+    "Assign, close and labels need a token with api: the setup guide's steps make one.",
   ],
   [
     'alice is a Guest',
     { level: 10 },
     '· Actions read only, alice is below Reporter here',
-    'Assign and close need Reporter or higher on boats/radar.',
+    'Assign, close and labels need Reporter or higher on boats/radar.',
   ],
 ] as const) {
   test(`gitlab.com read only (${why}): the Actions step says why`, GL, async ($, on) => {
