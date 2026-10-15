@@ -18,8 +18,8 @@ repo's CLAUDE.md.
 
 ## Way of working
 
-- Milestones name a theme, not a version: a milestone's issues each bump
-  the version as they land.
+- A milestone is one release: its issues each bump a pre-release, and the
+  merge to main sets the version.
 
 ## Testing
 

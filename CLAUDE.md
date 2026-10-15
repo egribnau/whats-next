@@ -11,8 +11,14 @@ there. Notes for working on a mod live in `docs/<name>/`.
 - Design first, on the maintainer's design canvas: artboard titles say
   "(proposal)" or "(built, <version>)". Build only after the maintainer
   agrees; keep the canvas in step with the code.
-- Bump the version in the mod's `.claude-plugin/plugin.json` with each
-  change, and update the README when behaviour changes.
+- Work on a branch, never on main: main is mirrored to the public repo,
+  which users install from. One branch per milestone, `<mod>/<milestone>`
+  in lower case (`whats-next/r1.1`); the maintainer merges it to main when
+  the milestone is done.
+- On the branch, each change bumps a pre-release of the milestone's
+  version in the mod's `.claude-plugin/plugin.json` (`1.1.0-pre.1`,
+  `1.1.0-pre.2`); the last commit before the merge sets the release
+  (`1.1.0`). Update the README when behaviour changes.
 - Commit and push only when asked; the maintainer pushes.
 - Commit messages carry no `Claude-Session:` line: the repo is mirrored
   publicly and those links open only for the maintainer.
