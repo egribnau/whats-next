@@ -64,7 +64,5 @@ test('/whats-next names itself when it does not know a word', async ($, on) => {
   world(on, [{ name: 'next', description: '', source: 'user' }])
   await $.session.start(START)
   const out = await $.command.run({ ...RUN, args: 'milestones' })
-  expect(out).toEqual(
-    expect.objectContaining({ text: `/whats-next does not know "milestones". Try /whats-next for What's next in front, /whats-next epics (or e) for Epics, or /whats-next help.` }),
-  )
+  expect(out).toEqual(expect.objectContaining({ text: `/whats-next does not know "milestones". Try /whats-next, or /whats-next help.` }))
 })

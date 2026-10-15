@@ -707,15 +707,13 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
   return setupView($, p, f, configure)
 }
 
-// /next opens both panes with What's next in front, and so does /next next
-// (n); /next epics (e) puts Epics in front; /next help opens What's next on
-// the help page. `name`: the command as registered.
+// /next opens the panes with What's next in front; /next help opens What's
+// next on the help page. `name`: the command as registered.
 async function runNext($: EngineInterface, name: string, word: string) {
   const lower = word.toLowerCase()
-  const want =
-    lower === '' || lower === 'next' || lower === 'n' ? 'both' : lower === 'epics' || lower === 'e' ? 'epics' : lower === 'help' ? 'help' : null
+  const want = lower === '' ? 'both' : lower === 'help' ? 'help' : null
   if (!want) {
-    return { text: `/${name} does not know "${word}". Try /${name} for What's next in front, /${name} epics (or e) for Epics, or /${name} help.` }
+    return { text: `/${name} does not know "${word}". Try /${name}, or /${name} help.` }
   }
   const openNext = async (title: string) => {
     await $.ui.open({ id: PANE, title })
@@ -723,25 +721,17 @@ async function runNext($: EngineInterface, name: string, word: string) {
   }
   // The milestone filter starts where you work again: a choice holds until /next.
   await update($, filterChosen, () => null)
-  // Epics alone opens nothing until it knows there are epics to show. The
-  // load opens no pane of its own: the Epics and Milestones tabs come below,
-  // after What's next, so the tabs are in the same order whatever the word.
-  if (want !== 'epics') await openNext("What's Next")
+  // The load opens no pane of its own: the Epics and Milestones tabs come
+  // below, after What's next.
+  await openNext("What's Next")
   const r = await refresh($, false)
   const s = await read($, setup)
   const ep = await read($, epics)
   const hasEpics = ep.kind === 'ok' && ep.openEpics > 0
-  if (want === 'epics' && (s.kind !== 'ready' || !r)) {
-    await openNext("What's Next")
-    return { text: "What's Next needs setting up: see its pane." }
-  }
-  if (want === 'epics' && r && !hasEpics) {
-    return { text: ep.kind === 'error' ? `Could not load the epics: ${ep.message}.` : `No open epics in ${slug(r)}.` }
-  }
   if (r) await openNext("What's next")
   // The Epics pane, a tab next to What's next, only while there are open epics.
   if (hasEpics) {
-    await $.ui.open({ id: EPICS_PANE, title: 'Epics', ...(want === 'epics' ? { focus: true as const } : {}) })
+    await $.ui.open({ id: EPICS_PANE, title: 'Epics' })
     await update($, panesOpen, ids => (ids.includes(EPICS_PANE) ? ids : [...ids, EPICS_PANE]))
   } else if (ep.kind === 'ok' && (await read($, panesOpen)).includes(EPICS_PANE)) {
     await $.ui.close({ id: EPICS_PANE })
@@ -757,8 +747,8 @@ async function runNext($: EngineInterface, name: string, word: string) {
     await $.ui.close({ id: MILESTONES_PANE })
   }
   // A pane opened new comes in front of the rest, and only `focus` brings an
-  // open one back: What's next last, with the keyboard, as Epics for /next epics.
-  if (want !== 'epics') await $.ui.open({ id: PANE, title: r ? "What's next" : "What's Next", focus: true })
+  // open one back: What's next last, with the keyboard.
+  await $.ui.open({ id: PANE, title: r ? "What's next" : "What's Next", focus: true })
   if (want === 'help') {
     await showHelp($, PANE)
     return { text: "What's Next's help is open in What's next: what each sign and colour means." }
@@ -768,9 +758,6 @@ async function runNext($: EngineInterface, name: string, word: string) {
   const shownFilter = await read($, filterShown)
   // The filter's word in a sentence.
   const showing = shownFilter ? filterWord(shownFilter.set) : 'All'
-  if (want === 'epics' && ep.kind === 'ok') {
-    return { text: `Epics for ${slug(r)}: ${ep.openEpics} open, showing ${showing}.` }
-  }
   if (o.kind !== 'ok') return { text: `What's Next is ready for ${slug(r)}, but could not load its issues.` }
   if (o.inProgress.length + o.queue.length + o.blocked.length === 0 && !o.next) {
     return { text: `What's Next is ready for ${slug(r)}: no open issues.` }
@@ -803,7 +790,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: taken ? FALLBACK_COMMAND : COMMAND,
       description: "Your issues and what's next, for this repo",
-      argumentHint: '[epics | help]',
+      argumentHint: '[help]',
     })
     if (taken) $.ui.toast("/next is taken by another command: What's Next is /whats-next in this session.")
     // A reload brings new code but keeps the session's state, which the old
