@@ -49,6 +49,7 @@ const filterChosen = atom({ plugin: 'whats-next', key: 'filterChosen' } as const
 const filterShown = atom({ plugin: 'whats-next', key: 'filterShown' } as const, null)
 const filterOpen = atom({ plugin: 'whats-next', key: 'filterOpen' } as const, false)
 const repoLabels = atom({ plugin: 'whats-next', key: 'repoLabels' } as const, { kind: 'idle' })
+const childrenToo = atom({ plugin: 'whats-next', key: 'childrenToo' } as const, true)
 const requests = atom({ plugin: 'whats-next', key: 'requests' } as const, null)
 
 // Every request What's Next sends the forge, counted, so Debug can say what each action cost.
@@ -330,7 +331,7 @@ async function loadDetail($: EngineInterface, r: Repo, pane: string, n: number, 
   // any issue's sub-issues.
   const childrenOf = async (): Promise<Ref[] | null> => {
     const all = await k.children(n)
-    return all ? all.map(c => ({ number: c.number, title: c.title, state: c.state, assignees: c.assignees, blocked: c.blocked })) : null
+    return all ? all.map(c => ({ number: c.number, title: c.title, state: c.state, assignees: c.assignees, blocked: c.blocked, milestone: c.milestone })) : null
   }
   if (cached) {
     const [parent, blocked, children] = await Promise.all([parentOf(), blockedOf(cached), childrenOf()])
@@ -404,6 +405,7 @@ async function backToList($: EngineInterface, pane: string) {
 async function refresh($: EngineInterface, follow = true): Promise<Repo | null> {
   issuesRead.clear()
   await update($, repoLabels, (): RepoLabels => ({ kind: 'idle' }))
+  await update($, childrenToo, () => true)
   const r = await check($)
   if (r && (await read($, setup)).kind === 'ready') {
     const before = await read($, epics)
@@ -469,7 +471,8 @@ async function openUrl($: EngineInterface, url: string) {
 // reads it again with What's next and the epics, so the change shows
 // everywhere. Pane `pane` goes back to its list, unless it `stay`s on the
 // issue; a refusal keeps the issue open there, shown under its actions.
-// `after` goes after the issue's number in the refusal (` to v1.2`).
+// `after` goes after the issue's number in the refusal (` to v1.2`);
+// `also`, once the change is done, the other issues it changed.
 async function writeIssue(
   $: EngineInterface,
   pane: string,
@@ -478,6 +481,7 @@ async function writeIssue(
   what: string,
   stay = false,
   after = '',
+  also: () => number[] = () => [],
 ): Promise<boolean> {
   const r = await read($, repo)
   const k = known
@@ -490,6 +494,8 @@ async function writeIssue(
   }
   const key = `${r.host}/${slug(r)}#${n}`
   issuesRead.delete(key)
+  const others = also()
+  for (const o of others) issuesRead.delete(`${r.host}/${slug(r)}#${o}`)
   if (!stay) await backToList($, pane)
   for (const p of [PANE, EPICS_PANE, MILESTONES_PANE]) {
     if (issueOf(await placeOf($, p)) === n) await loadDetail($, r, p, n, stay && p === pane)
@@ -498,6 +504,10 @@ async function writeIssue(
   // the lists show the change even where the forge's lists lag it.
   const fresh = issuesRead.get(key) ?? (await k.issue(n).catch(() => null))
   if (fresh) noteChange(`${r.host}/${slug(r)}`, fresh, await $.clock.now())
+  for (const o of others) {
+    const read = await k.issue(o).catch(() => null)
+    if (read) noteChange(`${r.host}/${slug(r)}`, read, await $.clock.now())
+  }
   await load($, r)
   return true
 }
@@ -551,15 +561,50 @@ async function toggleMilestones($: EngineInterface, pane: string) {
   await go($, pane, step.toggleMilestones)
 }
 
-// Issue `i` moved to milestone `m`, or out of its own for null; the list
-// shuts and the pane stays on the issue (DRAWING-issue.md, The milestone list).
-async function setMilestone($: EngineInterface, pane: string, i: IssueDetail, m: Milestone | null) {
+// Issue `i` moved to milestone `m`, or out of its own for null, and with
+// Children too ticked its open children in its old milestone, `children`;
+// the list shuts and the pane stays on the issue (DRAWING-issue.md, The
+// milestone list). The issue refused, no child is tried; a child refused,
+// the rest still move, and the refusal names it.
+async function setMilestone($: EngineInterface, pane: string, i: IssueDetail, m: Milestone | null, children: number[]) {
   await go($, pane, step.shutMilestones)
   const from = i.milestone?.title ?? null
-  return m
-    ? writeIssue($, pane, i.number, t => t.milestone(i.number, m), 'move', true, ` to ${m.title}`)
-    : writeIssue($, pane, i.number, t => t.milestone(i.number, null), 'take', true, from ? ` out of ${from}` : ' out of its milestone')
+  const kids = (await read($, childrenToo)) ? children : []
+  const moved: number[] = []
+  const refused: { n: number; why: string }[] = []
+  const change = async (t: Tracker) => {
+    const why = await t.milestone(i.number, m)
+    if (why !== null) return why
+    for (const c of kids) {
+      const no = await t.milestone(c, m)
+      if (no === null) moved.push(c)
+      else refused.push({ n: c, why: no })
+    }
+    return null
+  }
+  const done = await writeIssue(
+    $,
+    pane,
+    i.number,
+    change,
+    m ? 'move' : 'take',
+    true,
+    m ? ` to ${m.title}` : from ? ` out of ${from}` : ' out of its milestone',
+    () => moved,
+  )
+  const first = refused[0]
+  if (done && first) {
+    const which = refused.map(x => `#${x.n}`).join(', ')
+    const error = m
+      ? `Moved #${i.number} to ${m.title}; could not move ${which}: ${first.why.replace(/\.$/, '')}.`
+      : `Took #${i.number} out of ${from ?? 'its milestone'}; could not take ${which} out: ${first.why.replace(/\.$/, '')}.`
+    await update($, memberOf(detail, { requestId: pane }), (d): Detail => (d.kind === 'ok' ? { ...d, error } : d))
+  }
+  return done
 }
+
+// Children too ticked if not, unticked if so.
+const toggleChildrenToo = ($: EngineInterface) => update($, childrenToo, on => !on)
 
 // What a draft is made from: the issue, and its comments when known.
 type DraftSource = Pick<IssueRow, 'number' | 'title' | 'url' | 'body'> & {
@@ -640,7 +685,7 @@ const focusMoved: Hook<'ui.focus'> = async ($, e, next) => {
   const listed = listShown.get(e.requestId)
   const line = /^(toggle-label|pick-milestone)-(\d+)$/.exec(e.element ?? '')
   if (listed && line && (line[1] === 'toggle-label') === (listed.list === 'labels')) {
-    const k = Number(line[2])
+    const k = Number(line[2]) + listed.first
     const place = await placeOf($, e.requestId)
     const off = (listed.list === 'labels' ? place.labels : place.milestones)?.scroll ?? 0
     const to = k < off ? k : k >= off + listed.room ? k - listed.room + 1 : off
@@ -753,7 +798,8 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
     toggleLabels: () => toggleLabels($, id),
     setLabel: (i, l, on) => setLabel($, id, i, l, on),
     toggleMilestones: () => toggleMilestones($, id),
-    setMilestone: (i, m) => setMilestone($, id, i, m),
+    setMilestone: (i, m, children) => setMilestone($, id, i, m, children),
+    toggleChildrenToo: () => toggleChildrenToo($),
     workOn: i => workOn($, i, { pane: id, issue: i }),
     openUrl: url => openUrl($, url),
     counted: (label, action) => counted($, label, action),

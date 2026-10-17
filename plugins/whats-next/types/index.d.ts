@@ -106,7 +106,9 @@ export type Overview =
 // An issue or pull request another issue names. `assignees`: the logins an
 // issue is assigned to; `blocked`: an open issue waits on an open one of its
 // own. Both give its mark in the detail (DRAWING-issue.md, Detail lines).
-export type Ref = { number: number; title: string; state: string; blocked?: boolean; assignees?: string[] }
+// `milestone`: a child's, for the milestone list's Children too (DRAWING-issue.md,
+// The milestone list).
+export type Ref = { number: number; title: string; state: string; blocked?: boolean; assignees?: string[]; milestone?: string | null }
 
 export type CommitRef = { sha: string; message: string; when: string }
 
@@ -307,6 +309,9 @@ declare module 'claude-code' {
       filterOpen: boolean
       // The repo's labels, for the issue detail's labels list.
       repoLabels: RepoLabels
+      // Whether the milestone list moves an issue's open children in its
+      // old milestone with it; ticked until Refresh.
+      childrenToo: boolean
       // With Debug on: the last action, the requests it sent the forge, and
       // the requests of the session so far.
       requests: { label: string; count: number; total: number } | null

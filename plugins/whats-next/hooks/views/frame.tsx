@@ -32,9 +32,9 @@ export const hidden = new Map<string, { keys: Set<string>; first: string }>()
 
 // The issue detail's labels list or milestone list as last drawn in each
 // pane, by pane id: which, and how many of its lines show, for the focus to
-// scroll it (DRAWING-issue.md, The labels list). A pane without either open
-// has none.
-export const listShown = new Map<string, { list: 'labels' | 'milestones'; lines: number; room: number }>()
+// scroll it (DRAWING-issue.md, The labels list); `first`, the lines above
+// the first one a focus names. A pane without either open has none.
+export const listShown = new Map<string, { list: 'labels' | 'milestones'; lines: number; room: number; first: number }>()
 
 // What a press does, for the views: each changes what the panes show, so
 // none of it is done while drawing.
@@ -55,7 +55,8 @@ export type Acts = {
   toggleLabels: () => unknown
   setLabel: (i: IssueDetail, l: Label, on: boolean) => Promise<boolean>
   toggleMilestones: () => unknown
-  setMilestone: (i: IssueDetail, m: Milestone | null) => Promise<boolean>
+  setMilestone: (i: IssueDetail, m: Milestone | null, children: number[]) => Promise<boolean>
+  toggleChildrenToo: () => unknown
   workOn: (i: IssueDetail) => unknown
   openUrl: (url: string) => unknown
   counted: <T>(label: string, action: () => Promise<T>) => Promise<T>

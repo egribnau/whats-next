@@ -128,6 +128,11 @@ type World = {
   milestone?: number
   // The open milestones, over MILESTONES.
   open?: typeof MILESTONES
+  // #29 an epic, its children #31 and #34 open in v1.1, #32 open in v1.2,
+  // #33 closed in v1.1.
+  epic?: boolean
+  // A child whose move is refused.
+  refuseChild?: number
   scopes?: string[]
   refuse?: boolean
   sent: Sent[]
@@ -138,6 +143,28 @@ function world(on: On, w: World) {
   let has = w.milestone ?? 11
   const open = w.open ?? MILESTONES
   const raw = () => [...open, CLOSED].find(m => m.id === has) ?? null
+  const kids: Record<number, { milestone: number; state: string }> = {
+    31: { milestone: 11, state: 'open' },
+    32: { milestone: 12, state: 'open' },
+    33: { milestone: 11, state: 'closed' },
+    34: { milestone: 11, state: 'open' },
+  }
+  const child = (n: number) => ({
+    number: n,
+    title: `Child ${n}`,
+    state: kids[n]?.state ?? 'open',
+    html_url: `https://git.example.org/boats/radar/issues/${n}`,
+    body: '',
+    user: { login: 'alice' },
+    created_at: '2026-09-18T09:00:00Z',
+    updated_at: '2026-10-07T12:00:00Z',
+    comments: 0,
+    milestone: [...open, CLOSED].find(m => m.id === kids[n]?.milestone) ?? null,
+    due_date: null,
+    labels: [],
+    assignees: [],
+    repository: { full_name: 'boats/radar' },
+  })
   on('process.run', (_$, e) => {
     const cmd = e.argv.join(' ')
     const stdout = cmd === 'git remote get-url origin' ? 'git@git.example.org:boats/radar.git' : 'true'
@@ -163,7 +190,7 @@ function world(on: On, w: World) {
       comments: 0,
       milestone: raw(),
       due_date: null,
-      labels: [],
+      labels: w.epic ? [{ name: 'epic', color: '' }] : [],
       repository: { full_name: 'boats/radar' },
     })
     if (method !== 'GET') {
@@ -172,6 +199,13 @@ function world(on: On, w: World) {
       if (method === 'PATCH' && path === '/issues/29') {
         has = (JSON.parse(String(e.init?.body)) as { milestone: number }).milestone
         return reply(201, issue())
+      }
+      const kid = /^\/issues\/(\d+)$/.exec(path ?? '')
+      if (method === 'PATCH' && kid && kids[Number(kid[1])]) {
+        const n = Number(kid[1])
+        if (n === w.refuseChild) return reply(403, { message: 'user should have permission to write issue' })
+        kids[n] = { ...kids[n]!, milestone: (JSON.parse(String(e.init?.body)) as { milestone: number }).milestone }
+        return reply(201, child(n))
       }
       return reply(404, { message: 'not found' })
     }
@@ -182,7 +216,10 @@ function world(on: On, w: World) {
     }
     const page = Number(url.searchParams.get('page') ?? '1')
     if (url.pathname.endsWith('/issues/search')) return reply(200, page === 1 ? [issue()] : [])
-    if (path === '/issues') return reply(200, [])
+    if (path === '/issues') return reply(200, w.epic && page === 1 && url.searchParams.get('labels') === 'epic' ? [issue()] : [])
+    if (w.epic && path === '/issues/29/dependencies') return reply(200, page === 1 ? Object.keys(kids).map(n => child(Number(n))) : [])
+    const kidPath = /^\/issues\/(3\d)(\/.*)?$/.exec(path ?? '')
+    if (w.epic && kidPath) return reply(200, kidPath[2] ? [] : child(Number(kidPath[1])))
     if (path === '/milestones') {
       const state = url.searchParams.get('state')
       return reply(200, page === 1 ? (state === 'closed' ? [CLOSED] : open) : [])
@@ -405,4 +442,88 @@ test('a long list is cut to the pane, and the focus on a milestone out of view s
   expect(await top()).toBeLessThan(0)
   await $.ui.focus({ component: 'Pane', requestId: 'next', plugin: 'whats-next', element: 'pick-milestone-0', origin: { kind: 'person' } })
   expect(await top()).toBe(-0)
+})
+
+// Children too (#68): an issue's open children in its old milestone move with it.
+
+test('an epic: Children too leads the list, ticked, counting its open children in its milestone', TOKEN, async ($, on) => {
+  const sent: Sent[] = []
+  world(on, { sent, epic: true })
+  const ui = await opened($)
+  await ui.press({ key: 'milestone' })
+  const all = await texts(ui)
+  expect(all).toContain('☑ Children too     2')
+})
+
+test('ticked, a move takes the open children in the old milestone along; the others stay', TOKEN, async ($, on) => {
+  const sent: Sent[] = []
+  world(on, { sent, epic: true })
+  const ui = await opened($)
+  await ui.press({ key: 'milestone' })
+  await ui.press({ key: 'pick-milestone-1' })
+  expect(sent).toEqual([
+    { method: 'PATCH', url: '/api/v1/repos/boats/radar/issues/29', body: { milestone: 12 } },
+    { method: 'PATCH', url: '/api/v1/repos/boats/radar/issues/31', body: { milestone: 12 } },
+    { method: 'PATCH', url: '/api/v1/repos/boats/radar/issues/34', body: { milestone: 12 } },
+  ])
+})
+
+test('unticked, a move takes the issue alone; the choice stays until Refresh', TOKEN, async ($, on) => {
+  const sent: Sent[] = []
+  world(on, { sent, epic: true })
+  const ui = await opened($)
+  await ui.press({ key: 'milestone' })
+  await ui.press({ key: 'children-too' })
+  await expect(ui.find({ key: 'milestone-list' })).resolves.toBeDefined()
+  expect(await texts(ui)).toContain('☐ Children too     2')
+  await ui.press({ key: 'pick-milestone-1' })
+  expect(sent).toEqual([{ method: 'PATCH', url: '/api/v1/repos/boats/radar/issues/29', body: { milestone: 12 } }])
+  // Opened again: still unticked. After Refresh: ticked again.
+  await ui.press({ key: 'milestone' })
+  expect((await texts(ui)).some(t => t.startsWith('☐ Children too'))).toBe(true)
+  await ui.press({ key: 'milestone' })
+  await ui.press({ key: 'refresh' })
+  await ui.press({ key: 'milestone' })
+  expect((await texts(ui)).some(t => t.startsWith('☑ Children too'))).toBe(true)
+})
+
+test('No milestone, ticked, takes the open children in the old milestone out too', TOKEN, async ($, on) => {
+  const sent: Sent[] = []
+  world(on, { sent, epic: true })
+  const ui = await opened($)
+  await ui.press({ key: 'milestone' })
+  await ui.press({ key: 'pick-milestone-3' })
+  expect(sent.map(x => [x.url.split('/').pop(), x.body])).toEqual([
+    ['29', { milestone: 0 }],
+    ['31', { milestone: 0 }],
+    ['34', { milestone: 0 }],
+  ])
+})
+
+test('a child refused: the rest still move, and the refusal names it in red', TOKEN, async ($, on) => {
+  const sent: Sent[] = []
+  world(on, { sent, epic: true, refuseChild: 31 })
+  const ui = await opened($)
+  await ui.press({ key: 'milestone' })
+  await ui.press({ key: 'pick-milestone-1' })
+  expect(sent.map(x => x.url.split('/').pop())).toEqual(['29', '31', '34'])
+  const red = (await found(ui)).filter(t => t.props.color === 'error').map(t => t.text)
+  expect(red.join(' ')).toBe('Moved #29 to v1.2; could not move #31: user should have permission to write issue.')
+})
+
+test('the issue refused: no child is tried', TOKEN, async ($, on) => {
+  const sent: Sent[] = []
+  world(on, { sent, epic: true, refuse: true })
+  const ui = await opened($)
+  await ui.press({ key: 'milestone' })
+  await ui.press({ key: 'pick-milestone-1' })
+  expect(sent.map(x => x.url.split('/').pop())).toEqual(['29'])
+})
+
+test('an issue without children: no Children too', TOKEN, async ($, on) => {
+  const sent: Sent[] = []
+  world(on, { sent })
+  const ui = await opened($)
+  await ui.press({ key: 'milestone' })
+  expect((await texts(ui)).some(t => t.includes('Children too'))).toBe(false)
 })

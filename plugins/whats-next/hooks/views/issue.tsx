@@ -16,6 +16,7 @@ const setup = atom({ plugin: 'whats-next', key: 'setup' } as const, { kind: 'che
 const detail = atom({ plugin: 'whats-next', key: 'detail' } as const, { kind: 'idle' })
 const repoLabels = atom({ plugin: 'whats-next', key: 'repoLabels' } as const, { kind: 'idle' })
 const milestones = atom({ plugin: 'whats-next', key: 'milestones' } as const, null)
+const childrenToo = atom({ plugin: 'whats-next', key: 'childrenToo' } as const, true)
 
 // The issue detail (DRAWING-issue.md), in place of the list: issue `open`
 // of repo `r`, as read from the forge.
@@ -41,7 +42,7 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
   if (dt.kind === 'error') body.push(...lines('error', `Could not load #${dt.number}: ${dt.message}.`, { color: 'error' }))
   let over: RenderChildren = null
   let shownLabels: { issue: IssueDetail; known: RepoLabels; scroll: number } | null = null
-  let shownMilestones: { issue: IssueDetail; open: Milestone[] | null; scroll: number } | null = null
+  let shownMilestones: { issue: IssueDetail; open: Milestone[] | null; scroll: number; kids: number[]; too: boolean } | null = null
   listShown.delete(id)
   if (dt.kind === 'ok') {
     const i = dt.issue
@@ -245,7 +246,11 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
           ? `Assign, close, labels and milestone need push rights on ${slug(r)}.`
           : `Assign, close, labels and milestone need a token with ${t?.writeScope ?? 'write:issue'}: the setup guide's steps make one.`
     if (canAct && p.place.labels) shownLabels = { issue: i, known: await read($, repoLabels), scroll: p.place.labels.scroll }
-    if (canAct && p.place.milestones) shownMilestones = { issue: i, open: await read($, milestones), scroll: p.place.milestones.scroll }
+    // The open children in its milestone, which Children too moves with it.
+    const kids = children.filter(x => x.state === 'open' && (x.milestone ?? null) === (i.milestone?.title ?? null)).map(x => x.number)
+    if (canAct && p.place.milestones) {
+      shownMilestones = { issue: i, open: await read($, milestones), scroll: p.place.milestones.scroll, kids, too: await read($, childrenToo) }
+    }
     prompt = <Button key="prompt" label={d.say(ICON.work, 'Prompt')} hotkey="p" onPress={() => acts.workOn(i)} />
 
     // Closed: grey as a whole, number and title; blocked: the title dim.
@@ -350,7 +355,8 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
   }
   if (shownMilestones) {
     const at = f.rowOf(top, body, 'milestone-line')
-    over = milestoneList(shownMilestones.issue, shownMilestones.open, shownMilestones.scroll, at ?? 1)
+    const sm = shownMilestones
+    over = milestoneList(sm.issue, sm.open, sm.scroll, at ?? 1, sm.kids, sm.too)
   }
   return f.detailFrame(top, body, over ?? f.menuLines(actions, note))
 
@@ -406,7 +412,7 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
         )
       })
       const at = startAt(want, lines.length)
-      listShown.set(id, { list: 'labels', lines: lines.length, room: f.overlayRoom(at) - 1 })
+      listShown.set(id, { list: 'labels', lines: lines.length, room: f.overlayRoom(at) - 1, first: 0 })
       return f.overlay('labels-list', width, lines, scroll, head(width), at)
     }
     const text =
@@ -425,9 +431,11 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
   // The milestone list (DRAWING-issue.md, The milestone list): the open
   // milestones `open` in the milestone filter's order, due first, then No
   // milestone; issue `i`'s own in bold, first and grey when it is closed. A
-  // press moves the issue there and shuts the list. Cut to the pane,
-  // scrolled by `scroll`, starting on pane row `want` where it fits.
-  function milestoneList(i: IssueDetail, open: Milestone[] | null, scroll: number, want: number): RenderChildren {
+  // press moves the issue there, with `kids` when Children too is ticked
+  // (`too`), and shuts the list. Children too and a rule under it lead the
+  // list when there are kids. Cut to the pane, scrolled by `scroll`,
+  // starting on pane row `want` where it fits.
+  function milestoneList(i: IssueDetail, open: Milestone[] | null, scroll: number, want: number, kids: number[], too: boolean): RenderChildren {
     const width = Math.min(columns - 2, 20)
     const head = listHead('Milestone', 'milestones-shut', width, acts.toggleMilestones)
     if (open === null) {
@@ -462,7 +470,7 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
             onPress={() =>
               isOwn
                 ? acts.toggleMilestones()
-                : acts.counted(c.to ? `move #${i.number} to ${c.title}` : `take #${i.number} out of ${own}`, () => acts.setMilestone(i, c.to))
+                : acts.counted(c.to ? `move #${i.number} to ${c.title}` : `take #${i.number} out of ${own}`, () => acts.setMilestone(i, c.to, kids))
             }
           >
             <Text bold={isOwn} color={c.closed ? 'inactive' : undefined}>
@@ -473,8 +481,21 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
         </Box>
       )
     })
-    const at = startAt(want, lines.length)
-    listShown.set(id, { list: 'milestones', lines: lines.length, room: f.overlayRoom(at) - 1 })
-    return f.overlay('milestone-list', width, lines, scroll, head, at)
+    const lead: RenderChildren[] = kids.length
+      ? [
+          <Box key="children-too-line" height={1} flexShrink={0}>
+            <Button key="children-too" plain onPress={acts.toggleChildrenToo}>
+              <Text>{`${too ? '☑' : '☐'} Children too`.padEnd(width - String(kids.length).length) + String(kids.length)}</Text>
+            </Button>
+          </Box>,
+          <Box key="children-too-rule" height={1} flexShrink={0}>
+            <Text dimColor>{'─'.repeat(width)}</Text>
+          </Box>,
+        ]
+      : []
+    const all = [...lead, ...lines]
+    const at = startAt(want, all.length)
+    listShown.set(id, { list: 'milestones', lines: all.length, room: f.overlayRoom(at) - 1, first: lead.length })
+    return f.overlay('milestone-list', width, all, scroll, head, at)
   }
 }
