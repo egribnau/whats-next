@@ -90,9 +90,10 @@ function fake(f: Fake, calls: string[] = []): Tracker {
       calls.push(`members ${n}`)
       return f.members?.[n] ?? null
     },
-    parentOf: async n => {
+    parentsOf: async n => {
       calls.push(`parent ${n}`)
-      return f.parents?.[n] ?? null
+      const p = f.parents?.[n]
+      return p === undefined ? [] : [p]
     },
     nested: f.nested ?? false,
     lastClosed: async within => {
@@ -107,6 +108,7 @@ function fake(f: Fake, calls: string[] = []): Tracker {
     labels: async () => [],
     label: async () => null,
     milestone: async () => null,
+    parent: async () => null,
   }
 }
 

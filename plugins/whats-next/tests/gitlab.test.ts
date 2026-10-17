@@ -1205,7 +1205,7 @@ test('lastClosed: assigned to you, closed, by the milestone title or None, the l
   expect(asked).toHaveLength(2)
 })
 
-test("parentOf: the open epic linked as related; members: the related issues that are not epics; epics don't nest", async () => {
+test("parentsOf: the open epics linked as related; members: the related issues that are not epics; epics don't nest", async () => {
   const linked = (iid: number, labels: string[], state = 'opened') => ({
     ...issue(iid, '2026-09-01T00:00:00.000Z'),
     labels,
@@ -1214,13 +1214,45 @@ test("parentOf: the open epic linked as related; members: the related issues tha
   })
   const route = (u: URL): Reply =>
     u.pathname.endsWith('/issues/41/links')
-      ? { status: 200, body: [linked(29, ['epic'], 'closed'), linked(30, ['Epic']), linked(44, [])] }
+      ? { status: 200, body: [linked(29, ['epic'], 'closed'), linked(30, ['Epic']), linked(44, []), linked(32, ['epic'])] }
       : u.pathname.endsWith('/issues/30/links')
         ? { status: 200, body: [linked(41, []), linked(43, ['bug']), linked(31, ['epic'])] }
         : { status: 404, body: { message: '404 Not Found' } }
   const t = gitlab(fakeSend(route), R, 'glpat-x', null)
-  expect(await t.parentOf(41)).toBe(30)
+  expect(await t.parentsOf(41)).toEqual([30, 32])
   expect(await t.members(30)).toEqual([41, 43])
-  expect(await t.parentOf(99)).toBe(null)
+  expect(await t.parentsOf(30)).toEqual([31])
+  expect(await t.parentsOf(99)).toBe(null)
   expect(t.nested).toBe(false)
+})
+
+test('parent: on links the two as related, off deletes that link; no link to take off is done', async () => {
+  const LINKS = `${PROJECT}/issues/41/links`
+  const link = (iid: number, id: number, type = 'relates_to') => ({
+    ...issue(iid, '2026-09-01T00:00:00.000Z'),
+    web_url: `https://gitlab.com/boats/radar/-/issues/${iid}`,
+    issue_link_id: id,
+    link_type: type,
+  })
+  const asked: Asked[] = []
+  const route = (u: URL, method: string): Reply =>
+    u.pathname.endsWith('/issues/41/links') && method === 'GET'
+      ? { status: 200, body: [link(44, 7), link(30, 9), link(31, 5, 'blocks')] }
+      : { status: 200, body: {} }
+  const t = gitlab(fakeSend(route, asked), R, 'glpat-x', null)
+  expect(await t.parent(41, 30, true)).toBeNull()
+  expect(await t.parent(41, 30, false)).toBeNull()
+  expect(await t.parent(41, 31, false)).toBeNull()
+  expect(await t.parent(41, 99, false)).toBeNull()
+  expect(asked.map(a => [a.method, a.url, a.body])).toEqual([
+    ['POST', LINKS, { target_project_id: 'boats/radar', target_issue_iid: 30, link_type: 'relates_to' }],
+    ['GET', LINKS, undefined],
+    ['DELETE', `${LINKS}/9`, undefined],
+    ['GET', LINKS, undefined],
+    ['GET', LINKS, undefined],
+  ])
+  const refused = gitlab(fakeSend(() => ({ status: 403, body: { message: '403 Forbidden' } })), R, 'glpat-x', null)
+  expect(await refused.parent(41, 30, true)).toBe('403 Forbidden')
+  const found = (u: URL, method: string): Reply => (method === 'GET' ? { status: 200, body: [link(30, 9)] } : { status: 403, body: { message: '403 Forbidden' } })
+  expect(await gitlab(fakeSend(found), R, 'glpat-x', null).parent(41, 30, false)).toBe('403 Forbidden')
 })

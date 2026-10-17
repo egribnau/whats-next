@@ -181,6 +181,8 @@ type World = {
   // The scopes of the token: write:issue unless it says otherwise.
   scopes?: string[]
   refuse?: boolean
+  // A write held until this settles, to see the pane while it waits.
+  hold?: Promise<void>
   sent: Sent[]
   // Each time the repo labels are asked for.
   asked?: string[]
@@ -195,7 +197,7 @@ function world(on: On, w: World) {
     return { value: { exitCode: 0, stdout: `${stdout}\n`, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('http.fetch', (_$, e) => {
+  on('http.fetch', async (_$, e) => {
     const url = new URL(e.url)
     const method = e.init?.method ?? 'GET'
     const reply = (status: number, body: unknown) => ({
@@ -204,6 +206,7 @@ function world(on: On, w: World) {
     const path = e.url.startsWith(API) ? url.pathname.slice(new URL(API).pathname.length) : null
     if (method !== 'GET') {
       w.sent.push({ method, url: `${url.pathname}`, body: e.init?.body ? JSON.parse(String(e.init.body)) : null })
+      await w.hold
       if (w.refuse) return reply(403, { message: 'user should have permission to write issue' })
       const byId = (id: number) => LABELS.find(l => l.id === id)
       if (method === 'POST' && path === '/issues/29/labels') {
@@ -318,6 +321,24 @@ test('Labels in the menu opens the list with hotkey l; l again shuts it, and so 
   await expect(ui.find({ key: 'menu-labels' })).resolves.toBeUndefined()
 })
 
+test('labels past the line go on to the next, under the value, a label never split; each line opens the list', TOKEN, async ($, on) => {
+  const sent: Sent[] = []
+  const many = ['bug', 'accessibility', 'duplicate', 'good first issue', 'help wanted'].map(name => ({ name, color: 'e11d21' }))
+  world(on, { sent, labels: many })
+  const ui = await opened($)
+  const lines = ((await ui.findAll({ type: 'Box' })) as unknown as { props: { key?: string } }[]).map(b => b.props.key)
+  expect(lines).toContain('labels')
+  expect(lines).toContain('labels-1')
+  const all = await texts(ui)
+  // The key whole, the first line ending in a comma, the rest under it.
+  expect(all).toContain('Labels     ')
+  expect(all.filter(t => t === ',').length).toBe(1)
+  expect(all.indexOf('good first issue')).toBeLessThan(all.indexOf(','))
+  expect(all.indexOf(',')).toBeLessThan(all.indexOf('help wanted'))
+  await ui.press({ key: 'labels-line-1' })
+  await expect(ui.find({ key: 'labels-list' })).resolves.toBeDefined()
+})
+
 test('the list\'s frame starts on the Labels line\'s row', TOKEN, async ($, on) => {
   const sent: Sent[] = []
   world(on, { sent })
@@ -325,8 +346,8 @@ test('the list\'s frame starts on the Labels line\'s row', TOKEN, async ($, on) 
   await ui.press({ key: 'labels-line' })
   const topOf = async () => ((await ui.find({ key: 'labels-list' })) as unknown as { props: { top: number } }).props.top
   // [ ← ] row 0, the gap row 1, the heading 2, who opened it 3, a gap 4,
-  // Milestone 5, Labels 6.
-  expect(await topOf()).toBe(6)
+  // Epic 5, Milestone 6, Labels 7.
+  expect(await topOf()).toBe(7)
 })
 
 test('a list too long to fit below the Labels line starts under the top row', TOKEN, async ($, on) => {
@@ -343,7 +364,8 @@ test('the first line of the list: Labels, dim, and ✕, which shuts it', TOKEN, 
   const ui = await opened($)
   await ui.press({ key: 'labels-line' })
   const found = (await ui.findAll({ type: 'Text' })) as unknown as Found[]
-  expect(found.some(t => t.text === 'Labels ' && t.props.dimColor === true)).toBe(true)
+  // The name at the left, the gap after it kept for the spinner.
+  expect(found.some(t => t.text === 'Labels   ' && t.props.dimColor === true)).toBe(true)
   expect(found.some(t => t.text === '✕')).toBe(true)
   await ui.press({ key: 'labels-shut' })
   await expect(ui.find({ key: 'labels-list' })).resolves.toBeUndefined()
@@ -420,4 +442,21 @@ test('a long list is cut to the pane, and the focus on a label out of view scrol
   expect(await top()).toBeLessThan(0)
   await $.ui.focus({ component: 'Pane', requestId: 'next', plugin: 'whats-next', element: 'toggle-label-0', origin: { kind: 'person' } })
   expect(await top()).toBe(-0)
+})
+
+test('a press ticks at once; until the forge answers, a spinner turns on the first line, and the lines are dim', TOKEN, async ($, on) => {
+  let release = () => {}
+  const hold = new Promise<void>(go => (release = go))
+  world(on, { sent: [], hold })
+  const ui = await opened($)
+  await ui.press({ key: 'labels-line' })
+  const pressed = ui.press({ key: 'toggle-label-0' })
+  // Let the press run up to the held write.
+  for (let k = 0; k < 200; k++) await Promise.resolve()
+  const shown = (await ui.findAll({ type: 'Text' })) as unknown as { text: string; props: Record<string, unknown> }[]
+  expect(shown.find(t => /^Labels [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] $/.test(t.text))?.props.dimColor).toBe(true)
+  expect(shown.find(t => t.text.startsWith('☑ bug'))?.props.dimColor).toBe(true)
+  release()
+  await pressed
+  expect(await line(ui, 0)).toBe('☑ bug')
 })

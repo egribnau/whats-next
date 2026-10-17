@@ -62,6 +62,18 @@ export function gitlab(send: Send, r: Repo, token: string | null, known: string 
     return res.ok ? null : refusal(res)
   }
 
+  // A change to `url` that sends no body or a JSON one: null when GitLab took
+  // it, else why not.
+  async function writeAt(url: string, method: 'POST' | 'DELETE', body?: object): Promise<string | null> {
+    const res = await send(url, {
+      method,
+      headers: body ? { ...headers, 'Content-Type': 'application/json' } : headers,
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    }).catch((err: unknown) => message(err))
+    if (typeof res === 'string') return res
+    return res.ok ? null : refusal(res)
+  }
+
   // A login's user id, from what was seen before or else from GitLab's exact
   // match on the username; a string says why there is none.
   async function idOf(login: string): Promise<number | string> {
@@ -262,10 +274,10 @@ export function gitlab(send: Send, r: Repo, token: string | null, known: string 
       return raw ? raw.filter(l => !isEpic(names(l))).map(l => l.iid) : null
     },
 
-    // A related link has no direction: an open epic linked to it holds it.
-    async parentOf(n: number): Promise<number | null> {
+    // A related link has no direction: every open epic linked to it holds it.
+    async parentsOf(n: number): Promise<number[] | null> {
       const raw = await links(n, 'relates_to')
-      return raw?.find(l => l.state === 'opened' && isEpic(names(l)))?.iid ?? null
+      return raw ? raw.filter(l => l.state === 'opened' && isEpic(names(l))).map(l => l.iid) : null
     },
 
     // Epics linked to each other are peers: no epic is a child.
@@ -412,6 +424,17 @@ export function gitlab(send: Send, r: Repo, token: string | null, known: string 
     // By the milestone's id, a parent group's as the project's; 0 takes the
     // issue out of its own.
     milestone: (n, m) => (m && m.id === undefined ? Promise.resolve(`no id for ${m.title}`) : put(n, { milestone_id: m?.id ?? 0 })),
+    // A related link between the two; taking it off finds the link first,
+    // and none is done. What was seen of either's links is dropped.
+    async parent(n, p, on) {
+      linksAsked.delete(n)
+      linksAsked.delete(p)
+      if (on) return writeAt(`${project}/issues/${n}/links`, 'POST', { target_project_id: slug, target_issue_iid: p, link_type: 'relates_to' })
+      const raw = await fetchJson<RawLink[]>(get, `${project}/issues/${n}/links`)
+      if (!Array.isArray(raw)) return `could not read the links of #${n}`
+      const link = raw.find(l => l.iid === p && l.link_type === 'relates_to' && inProject(l.web_url))
+      return link?.issue_link_id === undefined ? null : writeAt(`${project}/issues/${n}/links/${link.issue_link_id}`, 'DELETE')
+    },
   }
 }
 
@@ -458,6 +481,7 @@ type RawStatistics = { statistics?: { counts?: { all?: number; closed?: number }
 // names, and how it is linked. `blocks` and `is_blocked_by` only on EE.
 type RawLink = {
   iid: number
+  issue_link_id?: number
   title: string
   state: string
   web_url: string

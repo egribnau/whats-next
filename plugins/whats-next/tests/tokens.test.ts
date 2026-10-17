@@ -237,10 +237,91 @@ test('Milestone: a milestone named after the token, and a refused move that echo
   await ui.press({ key: 'pick-14' })
   await ui.press({ key: 'milestone' })
   said.push(...(await texts(ui)))
-  await ui.press({ key: 'pick-milestone-0' })
+  // No milestone first, then the open ones.
+  await ui.press({ key: 'pick-milestone-1' })
   const red = ((await ui.findAll({ type: 'Text' })) as { text: string; props: Record<string, unknown> }[]).filter(t => t.props.color === 'error')
   const refusal = red.map(t => t.text).join(' ')
   expect(refusal.startsWith('Could not move #14 to rotate-<token>')).toBe(true)
+  expect(refusal).toContain('Bearer <token>')
+  said.push(...(await texts(ui)))
+  noToken([...said, refusal])
+})
+
+test('Epic: an epic named after the token in the parent list, and a refused put that echoes the request, show without the token', GH, async ($, on) => {
+  const epic = { ...issue(30, `Plan ${TOKEN}`), labels: [{ name: 'epic', color: 'aa66cc' }] }
+  const said = world(on, {
+    answers: {
+      '/repos/boats/radar/issues': url => {
+        const u = new URL(url)
+        return json(200, u.searchParams.has('labels') ? [epic] : u.searchParams.has('assignee') ? [] : [issue(14), epic])
+      },
+      '/repos/boats/radar/issues/14': () => json(200, { ...issue(14), id: 9014 }),
+      '/repos/boats/radar/issues/30/sub_issues': (url, h, method) => (method === 'POST' ? json(422, { message: echo(url, h) }) : null),
+    },
+  })
+  const ui = await shown($)
+  await ui.press({ key: 'pick-14' })
+  await ui.press({ key: 'parents' })
+  said.push(...(await texts(ui)))
+  expect(said.some(t => t.includes('#30 Plan <token>'))).toBe(true)
+  await ui.press({ key: 'pick-parent-1' })
+  const red = ((await ui.findAll({ type: 'Text' })) as { text: string; props: Record<string, unknown> }[]).filter(t => t.props.color === 'error')
+  const refusal = red.map(t => t.text).join(' ')
+  expect(refusal.startsWith('Could not put #14 under #30')).toBe(true)
+  expect(refusal).toContain('Bearer <token>')
+  said.push(...(await texts(ui)))
+  noToken([...said, refusal])
+})
+
+test('Epic: a refused take out that echoes the request shows without the token', GH, async ($, on) => {
+  const epic = { ...issue(30, `Plan ${TOKEN}`), labels: [{ name: 'epic', color: 'aa66cc' }] }
+  const said = world(on, {
+    answers: {
+      '/repos/boats/radar/issues': url => {
+        const u = new URL(url)
+        return json(200, u.searchParams.has('labels') ? [epic] : u.searchParams.has('assignee') ? [] : [issue(14), epic])
+      },
+      '/repos/boats/radar/issues/14': () => json(200, { ...issue(14), id: 9014 }),
+      '/repos/boats/radar/issues/14/parent': () => json(200, epic),
+      '/repos/boats/radar/issues/30/sub_issue': (url, h, method) => (method === 'DELETE' ? json(422, { message: echo(url, h) }) : null),
+    },
+  })
+  const ui = await shown($)
+  await ui.press({ key: 'pick-14' })
+  said.push(...(await texts(ui)))
+  await ui.press({ key: 'parents' })
+  // #30 ticked: a press takes #14 out of it.
+  await ui.press({ key: 'pick-parent-1' })
+  const red = ((await ui.findAll({ type: 'Text' })) as { text: string; props: Record<string, unknown> }[]).filter(t => t.props.color === 'error')
+  const refusal = red.map(t => t.text).join(' ')
+  expect(refusal.startsWith('Could not take #14 out of #30')).toBe(true)
+  expect(refusal).toContain('Bearer <token>')
+  said.push(...(await texts(ui)))
+  noToken([...said, refusal])
+})
+
+test("Epic: a refused read of the issue's id, before a put, that echoes the request shows without the token", GH, async ($, on) => {
+  const epic = { ...issue(30, `Plan ${TOKEN}`), labels: [{ name: 'epic', color: 'aa66cc' }] }
+  // The detail reads #14 as ever; the read for its id, after the press, is refused.
+  let pressed = false
+  const said = world(on, {
+    answers: {
+      '/repos/boats/radar/issues': url => {
+        const u = new URL(url)
+        return json(200, u.searchParams.has('labels') ? [epic] : u.searchParams.has('assignee') ? [] : [issue(14), epic])
+      },
+      '/repos/boats/radar/issues/14': (url, h) => (pressed ? json(403, { message: echo(url, h) }) : json(200, { ...issue(14), id: 9014 })),
+    },
+  })
+  const ui = await shown($)
+  await ui.press({ key: 'pick-14' })
+  await ui.press({ key: 'parents' })
+  said.push(...(await texts(ui)))
+  pressed = true
+  await ui.press({ key: 'pick-parent-1' })
+  const red = ((await ui.findAll({ type: 'Text' })) as { text: string; props: Record<string, unknown> }[]).filter(t => t.props.color === 'error')
+  const refusal = red.map(t => t.text).join(' ')
+  expect(refusal.startsWith('Could not put #14 under #30')).toBe(true)
   expect(refusal).toContain('Bearer <token>')
   said.push(...(await texts(ui)))
   noToken([...said, refusal])

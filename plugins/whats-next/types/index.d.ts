@@ -165,7 +165,8 @@ export type Page =
   | { kind: 'issue'; number: number; trail: number[]; folds: DetailFolds; milestone: string | null }
 // `labels`: whether the issue detail's labels list is open, and how far
 // it is scrolled, in rows (DRAWING-issue.md, The labels list); `milestones`
-// the same of its milestone list (DRAWING-issue.md, The milestone list).
+// the same of its milestone list (DRAWING-issue.md, The milestone list),
+// `parents` of its epic list (DRAWING-issue.md, The epic list).
 export type Where = {
   page: Page
   scroll: number
@@ -173,6 +174,7 @@ export type Where = {
   help: { scroll: number } | null
   labels?: { scroll: number } | null
   milestones?: { scroll: number } | null
+  parents?: { scroll: number } | null
 }
 
 // A label of the repo, as the labels list offers it: its forge colour, and
@@ -187,15 +189,24 @@ export type RepoLabels =
   | { kind: 'ok'; repo: string; labels: Label[] }
   | { kind: 'error'; repo: string; message: string }
 
+// What the epic list offers an issue (DRAWING-issue.md, The epic list):
+// the open epics, and on GitHub the open issues of its milestone, asked
+// once it opens for issue `number`.
+export type ParentChoices =
+  | { kind: 'idle' }
+  | { kind: 'loading'; number: number }
+  | { kind: 'ok'; number: number; epics: (Ref & { epic: boolean })[]; issues: (Ref & { epic: boolean })[] }
+
 export type Detail =
   | { kind: 'idle' }
   | { kind: 'loading'; number: number }
-  // `error`: why the last action on it was refused. `parent`: the issue it
-  // is a child of, and whether that is an epic; null for none. `blocked`:
+  // `error`: why the last action on it was refused. `parents`: the issues
+  // it is a child of, each with whether it is an epic. `busy`: the list
+  // waiting on the forge. `blocked`:
   // it waits on an open issue that is not its own child, for its mark.
   // `children`: the issues it holds, open and closed; null for none, or
   // when the forge would not say.
-  | { kind: 'ok'; issue: IssueDetail; error?: string; parent?: (Ref & { epic: boolean }) | null; blocked?: boolean; children?: Ref[] | null }
+  | { kind: 'ok'; issue: IssueDetail; error?: string; parents?: (Ref & { epic: boolean })[]; busy?: { list: 'labels' | 'milestones' | 'parents' }; blocked?: boolean; children?: Ref[] | null }
   | { kind: 'error'; number: number; message: string }
 
 // An issue an epic holds, as the forge says it: `assignees`: the logins it
@@ -296,6 +307,10 @@ declare module 'claude-code' {
       // Per pane: where it is, and what was loaded for the issue it shows.
       where: StateFamily<Where>
       detail: StateFamily<Detail>
+      // Per pane: what its epic list offers the issue it shows.
+      parentChoices: StateFamily<ParentChoices>
+      // The frame of the spinner a list waiting on the forge turns, counted up.
+      spinner: number
       epics: Epics
       // What's Next's panes that are open, by id: with more than one the engine draws
       // tabs naming them, so the title rows leave the names out.

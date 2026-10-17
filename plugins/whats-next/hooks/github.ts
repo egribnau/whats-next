@@ -43,8 +43,8 @@ export function github(send: Send, r: Repo, token: string | null, known: string 
   // A change to issue `n`: null when GitHub took it, else why not.
   const patch = (n: number, body: object) => patchAt(`${api}/issues/${n}`, body)
 
-  // A change at `url`, PATCH unless `method` says otherwise; DELETE sends
-  // no body. null when GitHub took it, else why not.
+  // A change at `url`, PATCH unless `method` says otherwise; a null body
+  // sends none. null when GitHub took it, else why not.
   async function patchAt(url: string, body: object | null, method = 'PATCH'): Promise<string | null> {
     const res = await send(url, {
       method,
@@ -203,10 +203,18 @@ export function github(send: Send, r: Repo, token: string | null, known: string 
       return raw ? raw.filter(c => c.html_url.toLowerCase().startsWith(here)).map(c => c.number) : null
     },
 
-    // Its parent issue, open and in this repo, label or not.
-    async parentOf(n: number): Promise<number | null> {
-      const raw = await fetchJson<RawIssue>(get, `${api}/issues/${n}/parent`)
-      return raw && raw.state !== 'closed' && raw.html_url.toLowerCase().startsWith(here) ? raw.number : null
+    // Its parent issue alone, open and in this repo, label or not; none when
+    // GitHub answers 404, which is how it says there is no parent.
+    async parentsOf(n: number): Promise<number[] | null> {
+      const res = await get(`${api}/issues/${n}/parent`).catch(() => null)
+      if (res?.status === 404) return []
+      if (!res?.ok) return null
+      try {
+        const raw = JSON.parse(res.text) as RawIssue
+        return raw.state !== 'closed' && raw.html_url.toLowerCase().startsWith(here) ? [raw.number] : []
+      } catch {
+        return null
+      }
     },
 
     nested: true,
@@ -360,6 +368,23 @@ export function github(send: Send, r: Repo, token: string | null, known: string 
         : patchAt(`${api}/issues/${n}/labels/${encodeURIComponent(l.name)}`, null, 'DELETE'),
     // By the milestone's number; null takes the issue out of its own.
     milestone: (n, m) => (m && m.id === undefined ? Promise.resolve(`no number for ${m.title}`) : patch(n, { milestone: m ? m.id : null })),
+    // A sub-issue is named by its id, not its number, so the id is asked
+    // first. Adding replaces the old parent in the same request.
+    async parent(n, p, on) {
+      const res = await get(`${api}/issues/${n}`).catch((err: unknown) => message(err))
+      if (typeof res === 'string') return res
+      if (!res.ok) return refusal(res)
+      let sub_issue_id: number | undefined
+      try {
+        sub_issue_id = (JSON.parse(res.text) as { id?: number }).id
+      } catch {
+        sub_issue_id = undefined
+      }
+      if (sub_issue_id === undefined) return `no id for #${n}`
+      return on
+        ? patchAt(`${api}/issues/${p}/sub_issues`, { sub_issue_id, replace_parent: true }, 'POST')
+        : patchAt(`${api}/issues/${p}/sub_issue`, { sub_issue_id }, 'DELETE')
+    },
   }
 }
 

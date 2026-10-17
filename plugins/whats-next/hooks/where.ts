@@ -24,7 +24,7 @@ export const foldsOf = (w: Where): DetailFolds => (w.page.kind === 'issue' ? w.p
 
 // A page shown as its rules say: at its top, its menu, labels list and
 // milestone list shut. Help is left as it is.
-const fresh = (w: Where, page: Page): Where => ({ ...w, page, scroll: 0, menu: false, labels: null, milestones: null })
+const fresh = (w: Where, page: Page): Where => ({ ...w, page, scroll: 0, menu: false, labels: null, milestones: null, parents: null })
 
 // Issue `n` from the list, or from the milestone detail the pane has open.
 export const open = (w: Where, n: number): Where =>
@@ -69,24 +69,25 @@ export const fold = (w: Where, change: (f: DetailFolds) => DetailFolds): Where =
 // The page scrolled to row `to`.
 export const scrollTo = (w: Where, to: number): Where => ({ ...w, scroll: to })
 
-// The menu opened if shut, shut if open; and shut. It shuts the labels list
-// and the milestone list.
-export const toggleMenu = (w: Where): Where => ({ ...w, menu: !w.menu, labels: null, milestones: null })
+// The menu opened if shut, shut if open; and shut. It shuts the labels list,
+// the milestone list and the epic list.
+export const toggleMenu = (w: Where): Where => ({ ...w, menu: !w.menu, labels: null, milestones: null, parents: null })
 export const shutMenu = (w: Where): Where => ({ ...w, menu: false })
 
 // The issue detail's labels list opened at its top if shut, shut if open;
-// it shuts the menu and the milestone list (DRAWING-issue.md, The labels list).
+// it shuts the menu, the milestone list and the epic list (DRAWING-issue.md,
+// The labels list).
 export const toggleLabels = (w: Where): Where =>
-  w.page.kind !== 'issue' ? w : { ...w, menu: false, milestones: null, labels: w.labels ? null : { scroll: 0 } }
+  w.page.kind !== 'issue' ? w : { ...w, menu: false, milestones: null, parents: null, labels: w.labels ? null : { scroll: 0 } }
 
 // The labels list scrolled to row `to`.
 export const scrollLabels = (w: Where, to: number): Where => (w.labels ? { ...w, labels: { scroll: to } } : w)
 
 // The issue detail's milestone list opened at its top if shut, shut if
-// open; it shuts the menu and the labels list (DRAWING-issue.md, The
-// milestone list).
+// open; it shuts the menu, the labels list and the epic list
+// (DRAWING-issue.md, The milestone list).
 export const toggleMilestones = (w: Where): Where =>
-  w.page.kind !== 'issue' ? w : { ...w, menu: false, labels: null, milestones: w.milestones ? null : { scroll: 0 } }
+  w.page.kind !== 'issue' ? w : { ...w, menu: false, labels: null, parents: null, milestones: w.milestones ? null : { scroll: 0 } }
 
 // The milestone list shut, as a press on one of its lines leaves it.
 export const shutMilestones = (w: Where): Where => ({ ...w, milestones: null })
@@ -94,9 +95,18 @@ export const shutMilestones = (w: Where): Where => ({ ...w, milestones: null })
 // The milestone list scrolled to row `to`.
 export const scrollMilestones = (w: Where, to: number): Where => (w.milestones ? { ...w, milestones: { scroll: to } } : w)
 
+// The issue detail's epic list opened at its top if shut, shut if open; it
+// shuts the menu, the labels list and the milestone list (DRAWING-issue.md,
+// The epic list).
+export const toggleParents = (w: Where): Where =>
+  w.page.kind !== 'issue' ? w : { ...w, menu: false, labels: null, milestones: null, parents: w.parents ? null : { scroll: 0 } }
+
+// The epic list scrolled to row `to`.
+export const scrollParents = (w: Where, to: number): Where => (w.parents ? { ...w, parents: { scroll: to } } : w)
+
 // The help page over what is shown, at its top; the scroll that page had is
 // kept for Back. Opened already, nothing changes.
-export const help = (w: Where): Where => (w.help ? w : { ...w, help: { scroll: w.scroll }, menu: false, labels: null, milestones: null, scroll: 0 })
+export const help = (w: Where): Where => (w.help ? w : { ...w, help: { scroll: w.scroll }, menu: false, labels: null, milestones: null, parents: null, scroll: 0 })
 
 // Back from the help page: what it was opened over, as it was.
 export const leaveHelp = (w: Where): Where => ({ ...w, help: null, menu: false, scroll: w.help?.scroll ?? 0 })

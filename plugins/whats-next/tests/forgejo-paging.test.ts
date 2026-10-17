@@ -74,3 +74,42 @@ test('paging: an empty page stops it even when the total says more', async () =>
   expect(got).toHaveLength(30)
   expect(asked).toHaveLength(2)
 })
+
+const epic = (number: number, state = 'open', label = 'epic') => ({ number, title: `Epic ${number}`, state, labels: [{ name: label }] })
+
+test('parentsOf: every open epic that depends on it, closed ones and non-epics left out; null when the request fails', async () => {
+  const r = { host: 'git.example.org', owner: 'boats', name: 'radar' }
+  const asked: string[] = []
+  const blocks = [epic(30), epic(31, 'closed'), epic(32, 'open', 'bug'), epic(33)]
+  const t = forgejo(fakeSend(() => ({ status: 200, body: blocks }), asked), r, 'tok', 'epic')
+  expect(await t.parentsOf(41)).toEqual([30, 33])
+  expect(asked).toEqual(['https://git.example.org/api/v1/repos/boats/radar/issues/41/blocks?limit=50&page=1'])
+  expect(await forgejo(fakeSend(() => ({ status: 200, body: [] })), r, 'tok', 'epic').parentsOf(41)).toEqual([])
+  expect(await forgejo(fakeSend(() => ({ status: 500, body: {} })), r, 'tok', 'epic').parentsOf(41)).toBeNull()
+})
+
+test('parent: POST to the epic\'s dependencies puts the issue under it, DELETE takes it out', async () => {
+  const r = { host: 'git.example.org', owner: 'boats', name: 'radar' }
+  const sent: { method: string; url: string; body: unknown }[] = []
+  const send = (async (url: string, init?: { method?: string; body?: string }) => {
+    sent.push({ method: init?.method ?? 'GET', url, body: init?.body ? JSON.parse(init.body) : null })
+    return { status: 201, ok: true, headers: {}, text: '{}' }
+  }) as unknown as Send
+  const t = forgejo(send, r, 'tok', 'epic')
+  expect(await t.parent(41, 30, true)).toBeNull()
+  expect(await t.parent(41, 30, false)).toBeNull()
+  const url = 'https://git.example.org/api/v1/repos/boats/radar/issues/30/dependencies'
+  const body = { owner: 'boats', repo: 'radar', index: 41 }
+  expect(sent).toEqual([
+    { method: 'POST', url, body },
+    { method: 'DELETE', url, body },
+  ])
+})
+
+test('parent: a refused change says the message Forgejo gave', async () => {
+  const r = { host: 'git.example.org', owner: 'boats', name: 'radar' }
+  const send = fakeSend(() => ({ status: 403, body: { message: 'user should have permission to write issue' } }))
+  const t = forgejo(send, r, 'tok', 'epic')
+  expect(await t.parent(41, 30, true)).toBe('user should have permission to write issue')
+  expect(await t.parent(41, 30, false)).toBe('user should have permission to write issue')
+})

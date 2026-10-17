@@ -300,6 +300,10 @@ most). A line the forge would not answer for is left out, as is an empty
 one, but Labels where the token may change them: there it is a plain
 button, as an Epic line, that opens the labels list, and with no labels
 it reads `none`, dim, so there is something to press (#66, decided 1D).
+Labels past the line go on to the next, under the value, as Children: a
+line ends in a comma where more follow, a label is never split (one longer
+than the line is cut), and each line opens the labels list (#74, decided
+10b).
 Milestone the same, where the token may change it: a plain button that
 opens the milestone list, `none`, dim, without one (#68). Epic the same:
 an issue without a parent has `Epic  none`, on GitHub `Parent  none`,
@@ -335,7 +339,22 @@ detail scrolls. Until the forge answers it reads `Loading …`; a repo with
 none, `No labels in boats/radar.`, dim; a list the forge refused, why, red.
 
 A refusal is red under the heading, where Assign's and Close's go: `Could
-not add bug to #29: 403 Forbidden.` (decided 4).
+not add bug to #29: 403 Forbidden.` (decided 4). A press ticks or unticks
+its box at once, the Labels line following, as the epic list does; refused,
+the box goes back as it was.
+
+Until the forge answers a press, the list waits: a spinner turns in the
+middle of its first line (`Epic      ⠹      ✕`, the frames `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`,
+dim), in the gap between the name and `✕` where the name reaches the
+middle (`Labels ⠹ ✕`); the name stays at the left. Its lines are dim and
+take no press; no words say what it does, and a refusal is red under the
+heading as ever. The list never changes width: the narrowest labels list
+is 10 columns, room for the gap. Once the forge answers, the spinner stops
+and the lines come back, while the lists are read again after it (#74,
+decided 8c-a and 9C; 8A's words were dropped, they made a narrow list
+wider; a name centered was not wanted). The milestone list and the epic
+list wait the same; the milestone list, which shuts on a press, spins
+on the Milestone line instead, before its value.
 
 The boxes are on the help page, under Buttons.
 
@@ -365,9 +384,13 @@ due date in the short form after it, no `⧗` (DRAWING.md, Due dates). The
 issue's own is bold; an issue in a closed milestone has that one first,
 grey and bold, its date dim. Each line is a plain button: Enter moves the
 issue there at once and shuts the list, and the pane stays on the issue
-(decided 3a); Enter on the issue's own only shuts it. The Milestone line,
-What's next, Epics and Milestones show the change at once, the milestone
-counts following, as after Assign Me and Close. The open milestones are
+(decided 3a); Enter on the issue's own only shuts it. Until the forge
+answers, a spinner turns on the Milestone line before its value, as the
+labels list waits (#74, decided 8c-a); the value is the new milestone from
+the press on, as the labels list ticks at once, and the old one again when
+the forge refuses. What's next, Epics and Milestones show the change once
+the forge has made it, the milestone counts following, as after Assign Me
+and Close. The open milestones are
 known already, so opening it asks nothing; until they are, it reads
 `Loading …`. A milestone list the forge refused is no list: only
 `No milestone`.
@@ -417,27 +440,37 @@ comes first after `No parent`, ticked. Every open issue, through a
 search, is for later (#102).
 
 Each line is a plain button: Enter ticks it or unticks it at once, and
-the list stays open, as the labels list (decided 3A). On Forgejo and
+the list stays open, as the labels list (decided 3A). The tick moves before
+the forge answers, and goes back if it refuses. Until it answers the list
+waits as the labels list does, its spinner turning (decided 8c-a): a press
+then is passed over, as the ticks it saw may be about to change, but not
+while the lists are read again after it.
+What the forge took counts for 30 seconds over what it answers, as
+GitHub answers the old parent for a while. On Forgejo and
 GitLab an issue can be under several epics; on GitHub it has one parent,
 so ticking another moves it and unticks the old. Only the parent
 changes: the issue keeps its milestone, which the Milestone line changes
 (decided 4a). The Epic lines, What's next, Epics and Milestones show the
 change at once, as after Labels. The epic's own text, such as a list of
-its children in its description, is left alone. The open epics are known
-already, so opening it asks nothing for them; on GitHub the issues of
-the milestone are asked when it opens, `Loading …` under the rule until
-they come. A list the forge refused is no list: only `No epic`.
+its children in its description, is left alone. The open epics, and on
+GitHub the open issues of the milestone, are known already from the
+lists; opening it asks only what a mark still needs (what an epic waits
+on), `Loading …` until then. Epics the forge would not list are no list:
+only `No epic`.
 
 On the forge it is: on Forgejo a dependency added to the epic or taken
 off it (the epic depends on its children); on GitLab a related link
 added or taken away (it has no direction); on GitHub the issue made a
-sub-issue of the parent, or taken out of it.
+sub-issue of the parent, or taken out of it, by the issue's id, which is
+asked first.
 
 A refusal is red under the heading, in the words put under and take out
 of (decided 5b-i): `Could not put #29 under #12: 403 Forbidden.`,
-`Could not take #29 out of #12: 403 Forbidden.` On GitHub a move is two
-requests, and one may fail alone: `Put #29 under #40; could not take it
-out of #12: 403 Forbidden.`
+`Could not take #29 out of #12: 403 Forbidden.` On GitHub a move is one
+request, which takes the issue out of its old parent too; `No epic` with
+several to take out of stops at the first refused. A refusal, here as after
+any action of the detail, stays until the next action or Refresh, even
+when an earlier press finishes after it.
 
 Drawn by: `epicList` in `issueView` (hooks/views/issue.tsx), in the
 frame's `overlay`.

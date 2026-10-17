@@ -351,7 +351,7 @@ test('↦ leaves out the epic that waits on an issue: it is that issue’s epic'
     blockers: async (n: number) => blockers[n] ?? [],
     children: async () => [],
     members: async () => [],
-    parentOf: async () => null,
+    parentsOf: async () => [],
     lastClosed: async () => null,
   } as unknown as Tracker
   const known = await loadRepo(t, { me: null, features: { time: true, deps: true, epics: true } })
@@ -392,7 +392,7 @@ test('the focus on the last control scrolls the detail to its end, so the text u
   const focus = (element: string) => $.ui.focus({ component: 'Pane', requestId: 'next', plugin: 'whats-next', element, origin: { kind: 'person' } })
   await focus('comment-0')
   expect(await rowsTop(ui)).toBe(end)
-  await focus('follow-30')
+  await focus('parent-0-line')
   expect(await rowsTop(ui)).toBe(-0)
 })
 

@@ -562,12 +562,14 @@ test('with write:issue and push, Assign Me and Close are in the menu, and hidden
     'close',
     'labels',
     'milestone',
+    'parents',
     'open',
     'refresh',
     'help',
     'back',
     'prompt',
     'menu',
+    'parent-0-line',
     'follow-24',
     'follow-19',
     'follow-31',
@@ -587,7 +589,7 @@ test('with write:issue and push, Assign Me and Close are in the menu, and hidden
   // The menu open: a line for each, its words then its hotkey.
   await ui.press({ key: 'menu' })
   const menu = (await keys(ui)).filter(k => k.startsWith('menu-'))
-  expect(menu).toEqual(['menu-assign', 'menu-close', 'menu-labels', 'menu-milestone', 'menu-open', 'menu-refresh', 'menu-help'])
+  expect(menu).toEqual(['menu-assign', 'menu-close', 'menu-labels', 'menu-milestone', 'menu-parents', 'menu-open', 'menu-refresh', 'menu-help'])
   const shown = await texts(ui)
   for (const [label, key] of [
     ['Assign Me', 'a'],
@@ -676,8 +678,8 @@ test('a refused assign keeps the issue open with why, and Prompt stays there too
 })
 
 for (const [why, rights, how] of [
-  ['the token lacks write:issue', { push: true }, "Assign, close, labels and milestone need a token with write:issue: the setup guide's steps make one."],
-  ['alice may not push here', { push: false, scopes: ['write:issue'] }, 'Assign, close, labels and milestone need push rights on boats/radar.'],
+  ['the token lacks write:issue', { push: true }, "Assign, close, labels, milestone and epic need a token with write:issue: the setup guide's steps make one."],
+  ['alice may not push here', { push: false, scopes: ['write:issue'] }, 'Assign, close, labels, milestone and epic need push rights on boats/radar.'],
 ] as const) {
   test(`read only (${why}): no Assign, Close or Labels, one line on how in the menu`, TOKEN, async ($, on) => {
     world(on, FULL, [], [], 'open', { ...rights })

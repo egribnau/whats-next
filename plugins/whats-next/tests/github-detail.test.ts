@@ -15,7 +15,12 @@ const OFF = { time: false, deps: false, epics: false }
 
 const person = (login: string, id: number) => ({ login, id, type: 'User', html_url: `https://github.com/${login}` })
 
-function issue(number: number, extra: { assignees?: string[]; state?: string } = {}) {
+const MILESTONES = {
+  'v1.1': { number: 1, title: 'v1.1', due_on: '2026-10-20T07:00:00Z', open_issues: 4, closed_issues: 0, state: 'open' },
+  'v1.2': { number: 2, title: 'v1.2', due_on: '2026-10-31T07:00:00Z', open_issues: 3, closed_issues: 1, state: 'open' },
+}
+
+function issue(number: number, extra: { assignees?: string[]; state?: string; milestone?: 'v1.1' | 'v1.2'; epic?: boolean } = {}) {
   const assignees = (extra.assignees ?? []).map((u, k) => person(u, 900 + k))
   return {
     url: `${API}/issues/${number}`,
@@ -24,12 +29,12 @@ function issue(number: number, extra: { assignees?: string[]; state?: string } =
     number,
     title: `Issue ${number}`,
     user: person('jdoe', 777),
-    labels: [{ id: 1, name: 'bug', color: 'd73a4a', default: true, description: null }],
+    labels: [extra.epic ? { id: 2, name: 'epic', color: '0e8a16', default: false, description: null } : { id: 1, name: 'bug', color: 'd73a4a', default: true, description: null }],
     state: extra.state ?? 'open',
     locked: false,
     assignee: assignees[0] ?? null,
     assignees,
-    milestone: { number: 2, title: 'v1.2', due_on: '2026-10-31T07:00:00Z', open_issues: 3, closed_issues: 1, state: 'open' },
+    milestone: MILESTONES[extra.milestone ?? 'v1.2'],
     comments: 2,
     created_at: '2026-09-18T09:00:00Z',
     updated_at: '2026-10-08T09:30:00Z',
@@ -210,6 +215,39 @@ test("a refused write says GitHub's message with the status", async () => {
   expect(await t.close(14, true)).toBe('HTTP 403, Resource not accessible by personal access token')
 })
 
+test('parent: the issue id is asked, then POSTed to the parent with replace_parent, or DELETEd from it', async () => {
+  const asked: Asked[] = []
+  const route = (u: URL, method: string): Reply => {
+    if (method === 'GET' && u.pathname === '/repos/boats/radar/issues/14') return { status: 200, body: issue(14) }
+    if (method === 'POST' && u.pathname === '/repos/boats/radar/issues/30/sub_issues') return { status: 201, body: issue(30) }
+    if (method === 'DELETE' && u.pathname === '/repos/boats/radar/issues/30/sub_issue') return { status: 200, body: issue(30) }
+    return NOT_FOUND
+  }
+  const t = github(fakeSend(route, asked), R, 'ghp_x', null)
+  expect(await t.parent(14, 30, true)).toBeNull()
+  expect(await t.parent(14, 30, false)).toBeNull()
+  expect(asked.map(a => [a.method, a.url, a.body])).toEqual([
+    ['GET', `${API}/issues/14`, undefined],
+    ['POST', `${API}/issues/30/sub_issues`, { sub_issue_id: 2400000014, replace_parent: true }],
+    ['GET', `${API}/issues/14`, undefined],
+    ['DELETE', `${API}/issues/30/sub_issue`, { sub_issue_id: 2400000014 }],
+  ])
+  expect(asked.map(a => a.auth)).toEqual(Array(4).fill('Bearer ghp_x'))
+})
+
+test('parent: a refused write or a failed id lookup says why', async () => {
+  const forbidden = { status: 403, body: { message: 'Resource not accessible by personal access token' } }
+  const refused = github(fakeSend((u, method) => (method === 'GET' ? { status: 200, body: issue(14) } : forbidden)), R, 't', null)
+  expect(await refused.parent(14, 30, true)).toBe('HTTP 403, Resource not accessible by personal access token')
+  expect(await refused.parent(14, 30, false)).toBe('HTTP 403, Resource not accessible by personal access token')
+  const asked: Asked[] = []
+  const lost = github(fakeSend(() => NOT_FOUND, asked), R, 't', null)
+  expect(await lost.parent(14, 30, true)).toBe('HTTP 404, Not Found')
+  expect(asked.map(a => a.method)).toEqual(['GET'])
+  const down = github((async () => { throw new Error('connect ECONNREFUSED') }) as unknown as Send, R, 't', null)
+  expect(await down.parent(14, 30, true)).toContain('ECONNREFUSED')
+})
+
 // The pane, on github.com
 
 const PANE = {
@@ -247,12 +285,18 @@ type Pane = {
   lag?: boolean
   // #14's sub-issues.
   subs?: unknown[]
+  // #14 in v1.1 among an open epic #30, the issues #15 and #16 of v1.1 and
+  // #17 of v1.2; the number #14 is under, if any.
+  board?: { parent?: number }
 }
 
 function paneWorld(on: On, w: Pane) {
   const clock = mock.clock(on)
-  let now = issue(14)
+  const board = w.board
+  let now = board ? issue(14, { milestone: 'v1.1' }) : issue(14)
   const before = now
+  const others = board ? [issue(30, { milestone: 'v1.1', epic: true }), issue(15, { milestone: 'v1.1' }), issue(16, { milestone: 'v1.1' }), issue(17)] : []
+  let parent = board?.parent
   on('process.run', (_$, e) => {
     const cmd = e.argv.join(' ')
     const stdout = cmd === 'git remote get-url origin' ? 'git@github.com:boats/radar.git' : cmd === 'pwd' ? '/Users/jdoe/dev/radar' : 'true'
@@ -274,19 +318,26 @@ function paneWorld(on: On, w: Pane) {
       if (body.state === 'closed' || body.state === 'open') now = { ...now, state: body.state }
       return reply(200, now)
     }
+    if (e.init?.method === 'POST' && p.endsWith('/sub_issues')) {
+      w.sent?.push({ body: JSON.parse(String(e.init.body ?? '{}')) as Record<string, unknown> })
+      parent = Number(p.split('/').at(-2))
+      return reply(201, now)
+    }
     if (p === '/user') return reply(200, { ...person('alice', 991), name: 'Alice' }, w.scopes !== undefined ? { 'x-oauth-scopes': w.scopes } : {})
     if (p === '/repos/boats/radar') {
       return reply(200, { full_name: 'boats/radar', private: true, has_issues: true, open_issues_count: 1, permissions: { push: w.push ?? true, pull: true } })
     }
     if (p === '/search/issues') return reply(200, { total_count: now.state === 'open' ? 1 : 0, items: [] })
-    if (p === '/repos/boats/radar/milestones') return reply(200, [])
+    if (p === '/repos/boats/radar/milestones') return reply(200, board ? Object.values(MILESTONES) : [])
+    if (p === '/repos/boats/radar/issues' && u.searchParams.get('labels') === 'epic') return reply(200, others.filter(i => i.labels.some(l => l.name === 'epic')))
     if (p === '/repos/boats/radar/issues') {
       const listed = w.lag ? before : now
-      const open = listed.state === 'open' ? [listed] : []
+      const open = listed.state === 'open' ? [listed, ...others] : others
       if (u.searchParams.has('assignee')) return reply(200, open.filter(i => i.assignees.some(a => a.login === 'alice')))
       return reply(200, open)
     }
     if (p === '/repos/boats/radar/issues/14') return reply(200, now)
+    if (p === '/repos/boats/radar/issues/14/parent') return parent ? reply(200, others.find(i => i.number === parent)) : reply(404, { message: 'Not Found' })
     if (p === '/repos/boats/radar/issues/14/timeline') return reply(200, TIMELINE)
     if (p === '/repos/boats/radar/issues/14/sub_issues' && w.subs) return reply(200, w.subs)
     if (p.startsWith('/repos/boats/radar/commits/')) return reply(200, commit(p.split('/').at(-1) ?? '', 'A commit'))
@@ -389,8 +440,8 @@ test("github.com detail: a refused close says GitHub's message, in red", GH, asy
 })
 
 for (const [why, w, notice] of [
-  ['alice may not push', { push: false }, 'Assign, close, labels and milestone need push rights on boats/radar.'],
-  ['a classic token without repo', { scopes: 'read:org' }, "Assign, close, labels and milestone need a token with repo: the setup guide's steps make one."],
+  ['alice may not push', { push: false }, 'Assign, close, labels, milestone and epic need push rights on boats/radar.'],
+  ['a classic token without repo', { scopes: 'read:org' }, "Assign, close, labels, milestone and epic need a token with repo: the setup guide's steps make one."],
 ] as const) {
   test(`github.com read only (${why}): no Assign or Close, one line on how`, GH, async ($, on) => {
     paneWorld(on, { ...w })
@@ -447,4 +498,63 @@ test('github.com detail: an issue without sub-issues has no Children', GH, async
   paneWorld(on, { subs: [] })
   const all = await texts(await opened($))
   expect(all).not.toContain('Children   ')
+})
+
+// The parent list (#74, DRAWING-issue.md, The epic list), on GitHub.
+
+const found = async (ui: Ui) => (await ui.findAll({ type: 'Text' })) as unknown as { text: string }[]
+const flat = async (ui: Ui) => (await found(ui)).map(t => t.text.replace(/\s+/g, ' ').trim())
+
+test('github.com parent list: Parent in the menu; No parent, the epic, then the issues of v1.1 under a rule', GH, async ($, on) => {
+  const asked: string[] = []
+  paneWorld(on, { board: {}, asked })
+  const ui = await opened($)
+  expect((await flat(ui)).some(t => t === 'Parent')).toBe(true)
+  expect((await found(ui)).some(t => t.text === 'none')).toBe(true)
+  await ui.press({ key: 'menu' })
+  expect(await texts(ui)).toContain('Parent          e')
+  expect(await keys(ui)).toContain('parents')
+  await ui.press({ key: 'menu' })
+
+  await expect(ui.find({ key: 'parent-list' })).resolves.toBeUndefined()
+  await ui.press({ key: 'parent-0-line' })
+  await expect(ui.find({ key: 'parent-list' })).resolves.toBeDefined()
+  const all = await flat(ui)
+  const from = all.indexOf('No parent')
+  expect(all.slice(from - 2, from)).toEqual(['Parent', '✕'])
+  const lines = all.slice(from).filter(t => t === 'No parent' || /^(☑|☐) /.test(t) || /^─+ v1\.\d ─+$/.test(t))
+  expect(lines).toEqual(['No parent', '☐ ○ #30 Issue 30', expect.stringMatching(/^─+ v1\.1 ─+$/), '☐ ○ #15 Issue 15', '☐ ○ #16 Issue 16'])
+  expect(asked.filter(a => a.startsWith('POST') || a.startsWith('DELETE'))).toEqual([])
+})
+
+test('github.com parent list: a press asks #14\'s id, then POSTs it to #15 with replace_parent; the list stays open', GH, async ($, on) => {
+  const asked: string[] = []
+  const sent: Pane['sent'] = []
+  paneWorld(on, { board: {}, asked, sent })
+  const ui = await opened($)
+  await ui.press({ key: 'parent-0-line' })
+  const before = asked.length
+  await ui.press({ key: 'pick-parent-3' })
+  // The id first, then the write; the reload that follows asks the rest.
+  const writes = asked.slice(before)
+  expect(writes[0]).toBe(`GET ${API}/issues/14`)
+  expect(writes[1]).toBe(`POST ${API}/issues/15/sub_issues`)
+  expect(asked.slice(before).filter(a => a.startsWith('POST') || a.startsWith('DELETE'))).toEqual([`POST ${API}/issues/15/sub_issues`])
+  expect(sent).toEqual([{ body: { sub_issue_id: 2400000014, replace_parent: true } }])
+  await expect(ui.find({ key: 'parent-list' })).resolves.toBeDefined()
+})
+
+test('github.com parent list: with a parent, a press on another moves it in one POST, no DELETE', GH, async ($, on) => {
+  const asked: string[] = []
+  const sent: Pane['sent'] = []
+  paneWorld(on, { board: { parent: 30 }, asked, sent })
+  const ui = await opened($)
+  await ui.press({ key: 'parent-0-line' })
+  const all = await flat(ui)
+  expect(all).toContain('☑ ○ #30 Issue 30')
+  await ui.press({ key: 'pick-parent-3' })
+  expect(sent).toEqual([{ body: { sub_issue_id: 2400000014, replace_parent: true } }])
+  expect(asked.filter(a => a.startsWith('POST'))).toEqual([`POST ${API}/issues/15/sub_issues`])
+  expect(asked.some(a => a.startsWith('DELETE'))).toBe(false)
+  await expect(ui.find({ key: 'parent-list' })).resolves.toBeDefined()
 })

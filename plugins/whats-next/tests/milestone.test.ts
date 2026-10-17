@@ -135,6 +135,8 @@ type World = {
   refuseChild?: number
   scopes?: string[]
   refuse?: boolean
+  // A write held until this settles, to see the pane while it waits.
+  hold?: Promise<void>
   sent: Sent[]
 }
 
@@ -171,7 +173,7 @@ function world(on: On, w: World) {
     return { value: { exitCode: 0, stdout: `${stdout}\n`, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('http.fetch', (_$, e) => {
+  on('http.fetch', async (_$, e) => {
     const url = new URL(e.url)
     const method = e.init?.method ?? 'GET'
     const reply = (status: number, body: unknown) => ({
@@ -195,6 +197,7 @@ function world(on: On, w: World) {
     })
     if (method !== 'GET') {
       w.sent.push({ method, url: url.pathname, body: e.init?.body ? JSON.parse(String(e.init.body)) : null })
+      await w.hold
       if (w.refuse) return reply(403, { message: 'user should have permission to write issue' })
       if (method === 'PATCH' && path === '/issues/29') {
         has = (JSON.parse(String(e.init?.body)) as { milestone: number }).milestone
@@ -270,7 +273,7 @@ async function lines(ui: Ui) {
 }
 const nameOf = (t: Line) => String(t.children?.[0] ?? '').trimEnd()
 
-test('the Milestone line opens the milestone list: the open ones due first, No milestone last, the issue\'s in bold', TOKEN, async ($, on) => {
+test('the Milestone line opens the milestone list: No milestone first, then the open ones due first, the issue\'s in bold', TOKEN, async ($, on) => {
   const sent: Sent[] = []
   world(on, { sent })
   const ui = await opened($)
@@ -278,7 +281,7 @@ test('the Milestone line opens the milestone list: the open ones due first, No m
   await ui.press({ key: 'milestone-line' })
   await expect(ui.find({ key: 'milestone-list' })).resolves.toBeDefined()
   const shown = await lines(ui)
-  expect(shown.map(nameOf)).toEqual(['v1.1', 'v1.2', 'v2.0', 'No milestone'])
+  expect(shown.map(nameOf)).toEqual(['No milestone', 'v1.1', 'v1.2', 'v2.0'])
   // The bold is on the Text around the name and the date.
   const bold = ((await ui.findAll({ type: 'Text' })) as unknown as Found[]).filter(t => t.props.bold === true).map(t => t.text)
   expect(bold.some(t => t.startsWith('v1.1'))).toBe(true)
@@ -292,7 +295,7 @@ test('a press moves the issue at once: the list shuts, the pane stays on the iss
   world(on, { sent })
   const ui = await opened($)
   await ui.press({ key: 'milestone-line' })
-  await ui.press({ key: 'pick-milestone-1' })
+  await ui.press({ key: 'pick-milestone-2' })
   expect(sent).toEqual([{ method: 'PATCH', url: '/api/v1/repos/boats/radar/issues/29', body: { milestone: 12 } }])
   await expect(ui.find({ key: 'milestone-list' })).resolves.toBeUndefined()
   await expect(ui.find({ key: 'milestone-line' })).resolves.toBeDefined()
@@ -306,7 +309,7 @@ test('No milestone takes the issue out of its own; the Milestone line then reads
   world(on, { sent })
   const ui = await opened($)
   await ui.press({ key: 'milestone' })
-  await ui.press({ key: 'pick-milestone-3' })
+  await ui.press({ key: 'pick-milestone-0' })
   expect(sent).toEqual([{ method: 'PATCH', url: '/api/v1/repos/boats/radar/issues/29', body: { milestone: 0 } }])
   const none = (await found(ui)).find(t => t.text === 'none')
   expect(none?.props.dimColor).toBe(true)
@@ -317,7 +320,7 @@ test("a press on the issue's own milestone shuts the list and sends nothing", TO
   world(on, { sent })
   const ui = await opened($)
   await ui.press({ key: 'milestone' })
-  await ui.press({ key: 'pick-milestone-0' })
+  await ui.press({ key: 'pick-milestone-1' })
   expect(sent).toEqual([])
   await expect(ui.find({ key: 'milestone-list' })).resolves.toBeUndefined()
 })
@@ -358,9 +361,10 @@ test("the list's frame starts on the Milestone line's row; its first line Milest
   world(on, { sent })
   const ui = await opened($)
   await ui.press({ key: 'milestone-line' })
-  // [ ← ] row 0, the gap row 1, the heading 2, who opened it 3, a gap 4, Milestone 5.
-  expect(((await ui.find({ key: 'milestone-list' })) as unknown as { props: { top: number } }).props.top).toBe(5)
+  // [ ← ] row 0, the gap row 1, the heading 2, who opened it 3, a gap 4, Epic 5, Milestone 6.
+  expect(((await ui.find({ key: 'milestone-list' })) as unknown as { props: { top: number } }).props.top).toBe(6)
   const all = await found(ui)
+  // Room for the spinner before the name.
   expect(all.some(t => t.text.startsWith('Milestone ') && t.text.length === 19 && t.props.dimColor === true)).toBe(true)
   await ui.press({ key: 'milestones-shut' })
   await expect(ui.find({ key: 'milestone-list' })).resolves.toBeUndefined()
@@ -372,7 +376,7 @@ test('an issue in a closed milestone: that one first, grey and bold, then the op
   const ui = await opened($)
   await ui.press({ key: 'milestone' })
   const shown = await lines(ui)
-  expect(shown.map(nameOf)).toEqual(['v1.0', 'v1.1', 'v1.2', 'v2.0', 'No milestone'])
+  expect(shown.map(nameOf)).toEqual(['No milestone', 'v1.0', 'v1.1', 'v1.2', 'v2.0'])
   const closed = (await found(ui)).find(t => t.text.startsWith('v1.0') && t.props.color === 'inactive')
   expect(closed?.props.bold).toBe(true)
 })
@@ -388,16 +392,18 @@ test('an issue without a milestone: Milestone reads none, dim, and No milestone 
   expect(bold).toContain('No milestone')
 })
 
-test('a refusal says why in red under the heading', TOKEN, async ($, on) => {
+test('a refusal says why in red under the heading, the Milestone line as it was', TOKEN, async ($, on) => {
   const sent: Sent[] = []
   world(on, { sent, refuse: true })
   const ui = await opened($)
   await ui.press({ key: 'milestone' })
-  await ui.press({ key: 'pick-milestone-1' })
+  await ui.press({ key: 'pick-milestone-2' })
   const red = (await found(ui)).filter(t => t.props.color === 'error').map(t => t.text)
   expect(red.join(' ')).toBe('Could not move #29 to v1.2: user should have permission to write issue.')
+  expect(await texts(ui)).toContain('v1.1')
+  expect(await texts(ui)).not.toContain('v1.2')
   await ui.press({ key: 'milestone' })
-  await ui.press({ key: 'pick-milestone-3' })
+  await ui.press({ key: 'pick-milestone-0' })
   const out = (await found(ui)).filter(t => t.props.color === 'error').map(t => t.text)
   expect(out.join(' ')).toBe('Could not take #29 out of v1.1: user should have permission to write issue.')
 })
@@ -419,7 +425,7 @@ test("the issue moved shows in What's next at once: back in the list, the milest
   world(on, { sent })
   const ui = await opened($)
   await ui.press({ key: 'milestone' })
-  await ui.press({ key: 'pick-milestone-1' })
+  await ui.press({ key: 'pick-milestone-2' })
   await ui.press({ key: 'back' })
   // v1.1 has no open issue left, so the milestone filter starts on v1.2,
   // where #29 now is.
@@ -460,7 +466,7 @@ test('ticked, a move takes the open children in the old milestone along; the oth
   world(on, { sent, epic: true })
   const ui = await opened($)
   await ui.press({ key: 'milestone' })
-  await ui.press({ key: 'pick-milestone-1' })
+  await ui.press({ key: 'pick-milestone-2' })
   expect(sent).toEqual([
     { method: 'PATCH', url: '/api/v1/repos/boats/radar/issues/29', body: { milestone: 12 } },
     { method: 'PATCH', url: '/api/v1/repos/boats/radar/issues/31', body: { milestone: 12 } },
@@ -476,7 +482,7 @@ test('unticked, a move takes the issue alone; the choice stays until Refresh', T
   await ui.press({ key: 'children-too' })
   await expect(ui.find({ key: 'milestone-list' })).resolves.toBeDefined()
   expect(await texts(ui)).toContain('☐ Children too     2')
-  await ui.press({ key: 'pick-milestone-1' })
+  await ui.press({ key: 'pick-milestone-2' })
   expect(sent).toEqual([{ method: 'PATCH', url: '/api/v1/repos/boats/radar/issues/29', body: { milestone: 12 } }])
   // Opened again: still unticked. After Refresh: ticked again.
   await ui.press({ key: 'milestone' })
@@ -492,7 +498,7 @@ test('No milestone, ticked, takes the open children in the old milestone out too
   world(on, { sent, epic: true })
   const ui = await opened($)
   await ui.press({ key: 'milestone' })
-  await ui.press({ key: 'pick-milestone-3' })
+  await ui.press({ key: 'pick-milestone-0' })
   expect(sent.map(x => [x.url.split('/').pop(), x.body])).toEqual([
     ['29', { milestone: 0 }],
     ['31', { milestone: 0 }],
@@ -505,7 +511,7 @@ test('a child refused: the rest still move, and the refusal names it in red', TO
   world(on, { sent, epic: true, refuseChild: 31 })
   const ui = await opened($)
   await ui.press({ key: 'milestone' })
-  await ui.press({ key: 'pick-milestone-1' })
+  await ui.press({ key: 'pick-milestone-2' })
   expect(sent.map(x => x.url.split('/').pop())).toEqual(['29', '31', '34'])
   const red = (await found(ui)).filter(t => t.props.color === 'error').map(t => t.text)
   expect(red.join(' ')).toBe('Moved #29 to v1.2; could not move #31: user should have permission to write issue.')
@@ -516,7 +522,7 @@ test('the issue refused: no child is tried', TOKEN, async ($, on) => {
   world(on, { sent, epic: true, refuse: true })
   const ui = await opened($)
   await ui.press({ key: 'milestone' })
-  await ui.press({ key: 'pick-milestone-1' })
+  await ui.press({ key: 'pick-milestone-2' })
   expect(sent.map(x => x.url.split('/').pop())).toEqual(['29'])
 })
 
@@ -526,4 +532,23 @@ test('an issue without children: no Children too', TOKEN, async ($, on) => {
   const ui = await opened($)
   await ui.press({ key: 'milestone' })
   expect((await texts(ui)).some(t => t.includes('Children too'))).toBe(false)
+})
+
+test('a press shows the new milestone at once; until the forge answers, a spinner turns before it', TOKEN, async ($, on) => {
+  let release = () => {}
+  const hold = new Promise<void>(go => (release = go))
+  world(on, { sent: [], hold })
+  const ui = await opened($)
+  await ui.press({ key: 'milestone-line' })
+  const pressed = ui.press({ key: 'pick-milestone-2' })
+  // Let the press run up to the held write.
+  for (let k = 0; k < 200; k++) await Promise.resolve()
+  expect((await found(ui)).find(t => /^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] $/.test(t.text))?.props.dimColor).toBe(true)
+  expect(await texts(ui)).toContain('v1.2')
+  expect(await texts(ui)).not.toContain('v1.1')
+  release()
+  await pressed
+  const all = await texts(ui)
+  expect(all.some(t => /^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] /.test(t))).toBe(false)
+  expect(all).toContain('v1.2')
 })

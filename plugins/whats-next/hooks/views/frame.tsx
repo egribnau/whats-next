@@ -34,7 +34,7 @@ export const hidden = new Map<string, { keys: Set<string>; first: string }>()
 // pane, by pane id: which, and how many of its lines show, for the focus to
 // scroll it (DRAWING-issue.md, The labels list); `first`, the lines above
 // the first one a focus names. A pane without either open has none.
-export const listShown = new Map<string, { list: 'labels' | 'milestones'; lines: number; room: number; first: number }>()
+export const listShown = new Map<string, { list: 'labels' | 'milestones' | 'parents'; lines: number; room: number; first: number }>()
 
 // What a press does, for the views: each changes what the panes show, so
 // none of it is done while drawing.
@@ -57,6 +57,8 @@ export type Acts = {
   toggleMilestones: () => unknown
   setMilestone: (i: IssueDetail, m: Milestone | null, children: number[]) => Promise<boolean>
   toggleChildrenToo: () => unknown
+  toggleParents: (i: IssueDetail, children: number[]) => unknown
+  setParent: (i: IssueDetail, p: number | null, on: boolean, parents: number[]) => Promise<boolean>
   workOn: (i: IssueDetail) => unknown
   openUrl: (url: string) => unknown
   counted: <T>(label: string, action: () => Promise<T>) => Promise<T>
@@ -126,7 +128,7 @@ export async function frame($: EngineInterface, p: Pane) {
       label="☰"
       onPress={async () => {
         await update($, filterOpen, () => false)
-        await go($, id, w => (w.labels ? step.toggleLabels(w) : w.milestones ? step.toggleMilestones(w) : step.toggleMenu(w)))
+        await go($, id, w => (w.labels ? step.toggleLabels(w) : w.milestones ? step.toggleMilestones(w) : w.parents ? step.toggleParents(w) : step.toggleMenu(w)))
       }}
     />
   )

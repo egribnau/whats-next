@@ -81,9 +81,10 @@ export type Tracker = {
   // The numbers of epic `n`'s children, open and closed, without checking
   // them for blockers: one request. null when the forge would not say.
   members(n: number): Promise<number[] | null>
-  // The open epic issue `n` is a child of; on GitHub its parent issue, of
-  // any kind. null for none, or when the forge would not say.
-  parentOf(n: number): Promise<number | null>
+  // The open epics issue `n` is a child of, in the forge's order; on GitHub
+  // its parent issue, of any kind, alone. None for none; null when the
+  // forge would not say.
+  parentsOf(n: number): Promise<number[] | null>
   // Whether a child can have children of its own (GitHub): then where you
   // work widens through each parent up the tree.
   nested: boolean
@@ -106,6 +107,11 @@ export type Tracker = {
   // Issue `n` moved to open milestone `m`, or out of its own for null: null
   // when done, else why not.
   milestone(n: number, m: MilestoneRow | null): Promise<string | null>
+  // Issue `n` put under parent `p`, or taken out of it: on Forgejo `p`
+  // depends on `n`, on GitLab they are linked as related, on GitHub `n`
+  // becomes a sub-issue of `p`, out of the parent it had. null when done,
+  // else why not.
+  parent(n: number, p: number, on: boolean): Promise<string | null>
   // Milestone `m` closed or open again: null when done, else why not.
   closeMilestone(m: MilestoneRow, closed: boolean): Promise<string | null>
 }

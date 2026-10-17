@@ -998,16 +998,18 @@ test('lastClosed: your closed issues in the milestone by its number, newest chan
   expect(new URL(asked[2]?.url ?? '').searchParams.has('milestone')).toBe(false)
 })
 
-test('parentOf: the parent issue while open and in this repo; members: the sub-issues by number', async () => {
+test('parentsOf: the parent issue alone while open and in this repo; members: the sub-issues by number', async () => {
   const parent = (state: string, repo = 'boats/radar') => ({ ...issue(30, '2026-09-01T00:00:00Z'), state, html_url: `https://github.com/${repo}/issues/30` })
   const answer = (body: unknown) => (u: URL): Reply =>
     u.pathname.endsWith('/sub_issues') ? { status: 200, body: [issue(43, '2026-09-01T00:00:00Z'), issue(44, '2026-09-02T00:00:00Z')] } : { status: 200, body }
   const asked: Asked[] = []
-  expect(await github(fakeSend(answer(parent('open')), asked), R, 'gh-x', null).parentOf(41)).toBe(30)
+  expect(await github(fakeSend(answer(parent('open')), asked), R, 'gh-x', null).parentsOf(41)).toEqual([30])
   expect(asked.map(a => a.url)).toEqual([`${API}/issues/41/parent`])
-  expect(await github(fakeSend(answer(parent('closed'))), R, 'gh-x', null).parentOf(41)).toBe(null)
-  expect(await github(fakeSend(answer(parent('open', 'boats/other'))), R, 'gh-x', null).parentOf(41)).toBe(null)
-  expect(await github(fakeSend(() => NOT_FOUND), R, 'gh-x', null).parentOf(41)).toBe(null)
+  expect(await github(fakeSend(answer(parent('closed'))), R, 'gh-x', null).parentsOf(41)).toEqual([])
+  expect(await github(fakeSend(answer(parent('open', 'boats/other'))), R, 'gh-x', null).parentsOf(41)).toEqual([])
+  expect(await github(fakeSend(() => NOT_FOUND), R, 'gh-x', null).parentsOf(41)).toEqual([])
+  expect(await github(fakeSend(() => ({ status: 500 })), R, 'gh-x', null).parentsOf(41)).toBe(null)
+  expect(await github(fakeSend(() => 'down'), R, 'gh-x', null).parentsOf(41)).toBe(null)
   const t = github(fakeSend(answer(null)), R, 'gh-x', null)
   expect(await t.members(30)).toEqual([43, 44])
   expect(t.nested).toBe(true)

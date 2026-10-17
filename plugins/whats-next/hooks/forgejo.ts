@@ -70,8 +70,8 @@ export function forgejo(send: Send, r: Repo, token: string | null, label: string
   // A change to issue `n`: null when Forgejo took it, else why not.
   const patch = (n: number, body: object) => patchAt(`${api}/issues/${n}`, body)
 
-  // A change at `url`, PATCH unless `method` says otherwise; DELETE sends
-  // no body. null when Forgejo took it, else why not.
+  // A change at `url`, PATCH unless `method` says otherwise; a label's
+  // DELETE sends no body. null when Forgejo took it, else why not.
   async function patchAt(url: string, body: object | null, method = 'PATCH'): Promise<string | null> {
     const res = await send(url, {
       method,
@@ -231,11 +231,11 @@ export function forgejo(send: Send, r: Repo, token: string | null, label: string
       return raw ? raw.filter(c => !isEpic(c)).map(c => c.number) : null
     },
 
-    // The epics that depend on it: an open one holds it as a child.
-    async parentOf(n: number): Promise<number | null> {
+    // The epics that depend on it: each open one holds it as a child.
+    async parentsOf(n: number): Promise<number[] | null> {
       if (depsByRepo.get(api) === false) return null
       const raw = await fetchJson<RawDep[]>(get, `${api}/issues/${n}/blocks?limit=50&page=1`)
-      return raw?.find(e => e.state !== 'closed' && isEpic(e))?.number ?? null
+      return raw ? raw.filter(e => e.state !== 'closed' && isEpic(e)).map(e => e.number) : null
     },
 
     // An epic that depends on another waits for it: no epic is a child.
@@ -312,6 +312,10 @@ export function forgejo(send: Send, r: Repo, token: string | null, label: string
           : patchAt(`${api}/issues/${n}/labels/${l.id}`, null, 'DELETE'),
     // By the milestone's id; 0 takes the issue out of its own.
     milestone: (n, m) => (m && m.id === undefined ? Promise.resolve(`no id for ${m.title}`) : patch(n, { milestone: m?.id ?? 0 })),
+    // An epic depends on its children: the issue is added to the epic's
+    // dependencies, or taken off them.
+    parent: (n, p, on) =>
+      patchAt(`${api}/issues/${p}/dependencies`, { owner: r.owner, repo: r.name, index: n }, on ? 'POST' : 'DELETE'),
   }
 }
 

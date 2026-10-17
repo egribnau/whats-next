@@ -1,7 +1,7 @@
 import { atom, memberOf, read } from 'claude-code'
 import type { EngineInterface, RenderChildren } from 'claude-code'
 
-import type { Comment, DetailFolds, IssueDetail, Label, Milestone, Ref, Repo, RepoLabels } from '../../types'
+import type { Comment, DetailFolds, IssueDetail, Label, Milestone, ParentChoices, Ref, Repo, RepoLabels } from '../../types'
 import { age, CLOSED_MARK, fit, FOLD_AT, ICON, whoOf } from '../draw'
 import { dueFirst, isMine, markOf, standing, type Mark, type Standing } from '../epics'
 import { duration, wrap } from '../issue'
@@ -17,6 +17,11 @@ const detail = atom({ plugin: 'whats-next', key: 'detail' } as const, { kind: 'i
 const repoLabels = atom({ plugin: 'whats-next', key: 'repoLabels' } as const, { kind: 'idle' })
 const milestones = atom({ plugin: 'whats-next', key: 'milestones' } as const, null)
 const childrenToo = atom({ plugin: 'whats-next', key: 'childrenToo' } as const, true)
+const parentChoices = atom({ plugin: 'whats-next', key: 'parentChoices' } as const, { kind: 'idle' })
+const spinner = atom({ plugin: 'whats-next', key: 'spinner' } as const, 0)
+
+// The spinner's frames, one cell each (DRAWING-issue.md, The labels list).
+const SPIN = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 
 // The issue detail (DRAWING-issue.md), in place of the list: issue `open`
 // of repo `r`, as read from the forge.
@@ -43,11 +48,17 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
   let over: RenderChildren = null
   let shownLabels: { issue: IssueDetail; known: RepoLabels; scroll: number } | null = null
   let shownMilestones: { issue: IssueDetail; open: Milestone[] | null; scroll: number; kids: number[]; too: boolean } | null = null
+  let shownParents: { issue: IssueDetail; choices: ParentChoices; scroll: number; under: Ref[] } | null = null
+  // The epic list's word: on GitHub any issue can be a parent (DRAWING-issue.md, The epic list).
+  const word = t?.nested ? 'Parent' : 'Epic'
+  // A list waiting on the forge, and its spinner's frame (DRAWING-issue.md, The labels list).
+  const waiting = dt.kind === 'ok' ? dt.busy : undefined
+  const frame = SPIN[(await read($, spinner)) % SPIN.length] ?? ' '
   listShown.delete(id)
   if (dt.kind === 'ok') {
     const i = dt.issue
-    // Assign, close, labels and milestone, when What's Next may: setup's
-    // Actions step says so.
+    // Assign, close, labels, milestone and epic, when What's Next may:
+    // setup's Actions step says so.
     const allowed = s.kind === 'ready' ? s.actions : ({ kind: 'read-only', reason: 'scope' } as const)
     const canAct = allowed.kind !== 'read-only'
     // Every key of the detail in one gutter, as wide as the longest, Blocked by.
@@ -58,14 +69,15 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
         {content}
       </Box>
     )
-    // The issue it is a child of, and what it blocks but that epic.
-    const parent = dt.parent ?? null
-    const blocks = (i.blocks ?? []).filter(x => !(parent?.epic && x.number === parent.number))
+    // The issues it is a child of, and what it blocks but those epics.
+    const parents = dt.parents ?? []
+    const blocks = (i.blocks ?? []).filter(x => !parents.some(q => q.epic && q.number === x.number))
     // Its children, the open ones a line each, the closed ones counted; what
     // blocks it is then only what it waits on outside them: on Forgejo an
     // epic depends on each child (DRAWING-issue.md, Detail lines that name
     // an issue).
     const children = dt.children ?? []
+    const childNumbers = children.map(x => x.number)
     const openChildren = children.filter(x => x.state !== 'closed')
     const closedChildren = children.length - openChildren.length
     const blockedBy = (i.blockedBy ?? []).filter(x => !children.some(c => c.number === x.number))
@@ -80,7 +92,7 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     type RefKind = 'parent' | 'child' | 'blocker' | 'blocks' | 'pull'
     const numberOf = (x: Ref, kind: RefKind) => `${kind === 'pull' && gitlab ? '!' : '#'}${x.number}`
     const refs: [Ref, RefKind][] = [
-      ...(parent ? [[parent, 'parent'] as [Ref, RefKind]] : []),
+      ...parents.map((x): [Ref, RefKind] => [x, 'parent']),
       ...openChildren.map((x): [Ref, RefKind] => [x, 'child']),
       ...blockedBy.map((x): [Ref, RefKind] => [x, 'blocker']),
       ...blocks.map((x): [Ref, RefKind] => [x, 'blocks']),
@@ -97,12 +109,14 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     }
     const refNum = Math.max(0, ...refs.map(([x, kind]) => numberOf(x, kind).length))
     const refEnd = Math.max(0, ...refs.map(([x, kind]) => endOf(x, kind).length))
+    // A parent line ends in → (DRAWING-issue.md, Detail lines that name an issue).
+    const arrow = parents.length > 0 ? 2 : 0
     const refLine = (key: string, label: string, x: Ref, kind: RefKind) => {
       const done = x.state === 'closed'
       const st = refStanding(x, kind)
       const mark: Mark = done ? CLOSED_MARK : st ? markOf(st, null) : { glyph: ' ' }
       const end = endOf(x, kind)
-      const room = columns - KEY - 2 - refNum - 1 - (refEnd > 0 ? refEnd + 1 : 0)
+      const room = columns - KEY - 2 - refNum - 1 - (refEnd > 0 ? refEnd + 1 : 0) - arrow
       const row = (
         <Text wrap="truncate-end">
           {d.markText(mark)}
@@ -115,6 +129,27 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
           ) : null}
         </Text>
       )
+      // A parent line opens the epic list where the token may write, and is
+      // plain text where it may not; its → opens the parent either way.
+      if (kind === 'parent') {
+        return keyed(
+          key,
+          label,
+          <>
+            {canAct ? (
+              <Button key={`${key}-line`} plain onPress={() => acts.toggleParents(i, childNumbers)}>
+                {row}
+              </Button>
+            ) : (
+              row
+            )}
+            <Text> </Text>
+            <Button key={`follow-${x.number}`} plain onPress={() => acts.followIssue(x.number)}>
+              <Text>→</Text>
+            </Button>
+          </>,
+        )
+      }
       return keyed(
         key,
         label,
@@ -127,10 +162,25 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
         ),
       )
     }
+    // Whether it can have a parent: on Forgejo and GitLab an epic has none.
+    const ownEpic = p.known?.openEpics.has(i.number) ?? false
+    const canParent = canAct && (t?.nested === true || !ownEpic)
     // The facts, in the facts line's order, then what only the detail has
     // (DRAWING-issue.md, Detail lines that name an issue).
     const facts: RenderChildren[] = []
-    if (parent) facts.push(refLine('parent', parent.epic ? 'Epic' : 'Parent', parent, 'parent'))
+    parents.forEach((x, k) => facts.push(refLine(`parent-${k}`, k === 0 ? (x.epic ? 'Epic' : 'Parent') : '', x, 'parent')))
+    // With none, where the token may write, a line to open the epic list from.
+    if (parents.length === 0 && canParent) {
+      facts.push(
+        keyed(
+          'parent-0',
+          word,
+          <Button key="parent-0-line" plain onPress={() => acts.toggleParents(i, childNumbers)}>
+            <Text dimColor>none</Text>
+          </Button>,
+        ),
+      )
+    }
     openChildren.forEach((x, k) => facts.push(refLine(`child-${k}`, k === 0 ? 'Children' : '', x, 'child')))
     if (closedChildren > 0) {
       facts.push(keyed('children-closed', openChildren.length === 0 ? 'Children' : '', <Text color="inactive">{`✓ ${closedChildren} closed`}</Text>))
@@ -140,11 +190,21 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     if (i.due) facts.push(keyed('due', 'Due', d.dueDate('due-date', i.due, now, { form: 'long', bare: true })))
     // Where the token may change it, the Milestone line opens the milestone
     // list, and stays with none (DRAWING-issue.md, The milestone list).
-    const milestoneText = i.milestone ? (
+    const milestoneValue = i.milestone ? (
       d.partsLine('milestone-parts', 0, [{ text: i.milestone.title }, ...d.duePart('milestone-due', i.milestone.due, now, { form: 'short' })])
     ) : (
       <Text dimColor>none</Text>
     )
+    // Waiting on the forge, its spinner before the value.
+    const milestoneText =
+      waiting?.list === 'milestones' ? (
+        <Text>
+          <Text dimColor>{`${frame} `}</Text>
+          {milestoneValue}
+        </Text>
+      ) : (
+        milestoneValue
+      )
     if (canAct) {
       facts.push(
         keyed(
@@ -156,21 +216,49 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
         ),
       )
     } else if (i.milestone) facts.push(keyed('milestone', 'Milestone', milestoneText))
-    // Where the token may change them, the Labels line opens the labels
-    // list, and stays with none (DRAWING-issue.md, The labels list).
-    const labelsText =
-      i.labels.length > 0 ? <Text wrap="truncate-end">{d.labelTexts(i.labels)}</Text> : <Text dimColor>none</Text>
+    // The labels in rows that fit after the key, a label never split (one
+    // longer than the row is cut): in a button the text wraps instead, and
+    // squeezes the key (DRAWING-issue.md, Detail lines; #74, decided 10b).
+    const labelRows: Label[][] = []
+    for (const l of i.labels) {
+      const row = labelRows[labelRows.length - 1]
+      const used = row ? row.reduce((n, x) => n + x.name.length + 2, 0) : 0
+      // Room for the name, and for the comma after it should one follow.
+      if (row && used + l.name.length + 1 <= columns - KEY) row.push(l)
+      else labelRows.push([{ ...l, name: fit(l.name, columns - KEY - 1) }])
+    }
+    const labelsRow = (row: Label[], k: number) => (
+      <Text>
+        {d.labelTexts(row)}
+        {k < labelRows.length - 1 && <Text dimColor>,</Text>}
+      </Text>
+    )
+    // Where the token may change them, the Labels lines open the labels
+    // list, and stay with none (DRAWING-issue.md, The labels list).
     if (canAct) {
-      facts.push(
-        keyed(
-          'labels',
-          'Labels',
-          <Button key="labels-line" plain onPress={acts.toggleLabels}>
-            {labelsText}
-          </Button>,
+      if (labelRows.length === 0) {
+        facts.push(
+          keyed(
+            'labels',
+            'Labels',
+            <Button key="labels-line" plain onPress={acts.toggleLabels}>
+              <Text dimColor>none</Text>
+            </Button>,
+          ),
+        )
+      }
+      labelRows.forEach((row, k) =>
+        facts.push(
+          keyed(
+            k === 0 ? 'labels' : `labels-${k}`,
+            k === 0 ? 'Labels' : '',
+            <Button key={k === 0 ? 'labels-line' : `labels-line-${k}`} plain onPress={acts.toggleLabels}>
+              {labelsRow(row, k)}
+            </Button>,
+          ),
         ),
       )
-    } else if (i.labels.length > 0) facts.push(keyed('labels', 'Labels', labelsText))
+    } else labelRows.forEach((row, k) => facts.push(keyed(k === 0 ? 'labels' : `labels-${k}`, k === 0 ? 'Labels' : '', labelsRow(row, k))))
     if (i.branch) facts.push(keyed('branch', 'Branch', <Text>{i.branch}</Text>))
     const time = i.logged
       ? `${duration(i.logged)} logged${i.estimate ? ` of ${duration(i.estimate)} estimated` : ''}`
@@ -232,6 +320,7 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
             },
             { key: 'labels', label: 'Labels', hotkey: 'l', onPress: acts.toggleLabels },
             { key: 'milestone', label: 'Milestone', hotkey: 'm', onPress: acts.toggleMilestones },
+            ...(canParent ? [{ key: 'parents', label: word, hotkey: 'e', onPress: () => acts.toggleParents(i, childNumbers) }] : []),
           ]
         : []),
       { key: 'open', label: 'Open in Browser', hotkey: 'o', onPress: () => acts.openUrl(i.url) },
@@ -241,15 +330,18 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     note = canAct
       ? undefined
       : allowed.kind === 'read-only' && allowed.reason === 'role'
-        ? `Assign, close, labels and milestone need Reporter or higher on ${slug(r)}.`
+        ? `Assign, close, labels, milestone and epic need Reporter or higher on ${slug(r)}.`
         : allowed.kind === 'read-only' && allowed.reason === 'push'
-          ? `Assign, close, labels and milestone need push rights on ${slug(r)}.`
-          : `Assign, close, labels and milestone need a token with ${t?.writeScope ?? 'write:issue'}: the setup guide's steps make one.`
+          ? `Assign, close, labels, milestone and epic need push rights on ${slug(r)}.`
+          : `Assign, close, labels, milestone and epic need a token with ${t?.writeScope ?? 'write:issue'}: the setup guide's steps make one.`
     if (canAct && p.place.labels) shownLabels = { issue: i, known: await read($, repoLabels), scroll: p.place.labels.scroll }
     // The open children in its milestone, which Children too moves with it.
     const kids = children.filter(x => x.state === 'open' && (x.milestone ?? null) === (i.milestone?.title ?? null)).map(x => x.number)
     if (canAct && p.place.milestones) {
       shownMilestones = { issue: i, open: await read($, milestones), scroll: p.place.milestones.scroll, kids, too: await read($, childrenToo) }
+    }
+    if (canParent && p.place.parents) {
+      shownParents = { issue: i, choices: await read($, memberOf(parentChoices, p.e)), scroll: p.place.parents.scroll, under: parents }
     }
     prompt = <Button key="prompt" label={d.say(ICON.work, 'Prompt')} hotkey="p" onPress={() => acts.workOn(i)} />
 
@@ -345,8 +437,8 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     }
   }
   // [ ← ] and the menu, with Prompt before it once the issue is read; the
-  // labels list or the milestone list over the rows when one is open, else
-  // the menu.
+  // labels list, the milestone list or the epic list over the rows when one
+  // is open, else the menu.
   const top = f.detailTop(actions, acts.goBack, prompt)
   if (shownLabels) {
     // Its frame on the Labels line's row, else under the top row.
@@ -358,6 +450,12 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     const sm = shownMilestones
     over = milestoneList(sm.issue, sm.open, sm.scroll, at ?? 1, sm.kids, sm.too)
   }
+  if (shownParents) {
+    // Its frame on the first Epic line's row.
+    const at = f.rowOf(top, body, 'parent-0-line')
+    const sp = shownParents
+    over = epicList(sp.issue, sp.choices, sp.scroll, at ?? 1, sp.under)
+  }
   return f.detailFrame(top, body, over ?? f.menuLines(actions, note))
 
   // The pane row a list of `lines` lines starts on: `want` where it fits
@@ -368,12 +466,17 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     return Math.max(1, Math.min(want, p.height - counted - lines - 3))
   }
 
-  // A list's first line: its name, dim, and ✕ at the right, button `shut`,
-  // which shuts it; it stays when the lines under it scroll.
-  function listHead(name: string, shut: string, width: number, onPress: () => unknown) {
+  // A list's first line: its name at the left, dim, the spinner in the
+  // middle while it waits (`spin`), in the gap after the name where the name
+  // reaches the middle, and ✕ at the right, button `shut`, which shuts it; it
+  // stays when the lines under it scroll.
+  function listHead(name: string, shut: string, width: number, onPress: () => unknown, spin = false) {
+    const text = fit(name, width - 2).padEnd(width - 1)
+    const named = text.trimEnd().length
+    const mid = Math.floor(width / 2) > named ? Math.floor(width / 2) : named + Math.floor((width - 1 - named) / 2)
     return (
       <Box key={`${shut}-head`} height={1} flexShrink={0}>
-        <Text dimColor>{fit(name, width - 2).padEnd(width - 1)}</Text>
+        <Text dimColor>{spin && mid > named && mid < width - 1 ? text.slice(0, mid) + frame + text.slice(mid + 1) : text}</Text>
         <Button key={shut} plain onPress={onPress}>
           <Text>✕</Text>
         </Button>
@@ -392,19 +495,24 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
         <Text {...props}>{text}</Text>
       </Box>,
     ]
-    const head = (width: number) => listHead('Labels', 'labels-shut', width, acts.toggleLabels)
+    const busy = waiting?.list === 'labels'
+    const head = (width: number) => listHead('Labels', 'labels-shut', width, acts.toggleLabels, busy)
     if (known.kind === 'ok' && known.labels.length > 0) {
       const has = new Set(i.labels.map(l => l.name))
-      const width = Math.min(columns - 2, Math.max(8, ...known.labels.map(l => l.name.length + 2)))
+      const width = Math.min(columns - 2, Math.max(10, ...known.labels.map(l => l.name.length + 2)))
       const lines = known.labels.map((l: Label, k) => {
         const on = has.has(l.name)
         const name = fit(l.name, width - 2)
         return (
           <Box key={`label-line-${k}`} height={1} flexShrink={0}>
-            <Button key={`toggle-label-${k}`} plain onPress={() => acts.counted(`${on ? 'take off' : 'add'} ${l.name}`, () => acts.setLabel(i, l, !on))}>
-              <Text>
+            <Button
+              key={`toggle-label-${k}`}
+              plain
+              onPress={() => (busy ? undefined : acts.counted(`${on ? 'take off' : 'add'} ${l.name}`, () => acts.setLabel(i, l, !on)))}
+            >
+              <Text dimColor={busy}>
                 {on ? '☑ ' : '☐ '}
-                {d.labelTexts([{ name, color: l.color }])}
+                {busy ? name : d.labelTexts([{ name, color: l.color }])}
                 {' '.repeat(Math.max(0, width - 2 - name.length))}
               </Text>
             </Button>
@@ -417,7 +525,7 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     }
     const text =
       known.kind === 'ok' ? `No labels in ${slug(r)}.` : known.kind === 'error' ? `Could not load the labels: ${known.message}.` : 'Loading …'
-    const width = Math.min(columns - 2, Math.max(8, text.length))
+    const width = Math.min(columns - 2, Math.max(10, text.length))
     return f.overlay(
       'labels-list',
       width,
@@ -428,9 +536,9 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     )
   }
 
-  // The milestone list (DRAWING-issue.md, The milestone list): the open
-  // milestones `open` in the milestone filter's order, due first, then No
-  // milestone; issue `i`'s own in bold, first and grey when it is closed. A
+  // The milestone list (DRAWING-issue.md, The milestone list): No milestone,
+  // then the open milestones `open` in the milestone filter's order, due
+  // first; issue `i`'s own in bold, first and grey when it is closed. A
   // press moves the issue there, with `kids` when Children too is ticked
   // (`too`), and shuts the list. Children too and a rule under it lead the
   // list when there are kids. Cut to the pane, scrolled by `scroll`,
@@ -456,9 +564,9 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     const ownClosed = own !== null && !open.some(m => m.title === own)
     type Choice = { title: string; due: string | null; to: Milestone | null; closed?: boolean }
     const choices: Choice[] = [
+      { title: 'No milestone', due: null, to: null },
       ...(ownClosed && i.milestone ? [{ title: i.milestone.title, due: i.milestone.due, to: null, closed: true }] : []),
       ...dueFirst(open).map(m => ({ title: m.title, due: m.due, to: m as Milestone })),
-      { title: 'No milestone', due: null, to: null },
     ]
     const lines = choices.map((c, k) => {
       const isOwn = c.closed === true || (c.to ? c.title === own : own === null)
@@ -497,5 +605,96 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
     const at = startAt(want, all.length)
     listShown.set(id, { list: 'milestones', lines: all.length, room: f.overlayRoom(at) - 1, first: lead.length })
     return f.overlay('milestone-list', width, all, scroll, head, at)
+  }
+
+  // The epic list (DRAWING-issue.md, The epic list), on GitHub the parent
+  // list: No epic, which takes issue `i` out of each of `under`, a parent
+  // offered nowhere else, the open epics, and on GitHub under a rule naming
+  // its milestone the open issues of it. Each after a box that says whether
+  // `i` is under it; a press puts it under or takes it out, and the list
+  // stays open. Cut to the pane, scrolled by `scroll`, starting on pane row
+  // `want` where it fits.
+  function epicList(i: IssueDetail, choices: ParentChoices, scroll: number, want: number, under: Ref[]): RenderChildren {
+    const width = Math.min(columns - 2, 40)
+    const busy = waiting?.list === 'parents'
+    const head = listHead(word, 'parents-shut', width, () => acts.toggleParents(i, []), busy)
+    if (choices.kind !== 'ok' || choices.number !== i.number) {
+      return f.overlay(
+        'parent-list',
+        width,
+        [
+          <Box key="parents-said" height={1} flexShrink={0}>
+            <Text dimColor>{'Loading …'.padEnd(width)}</Text>
+          </Box>,
+        ],
+        undefined,
+        head,
+        startAt(want, 1),
+      )
+    }
+    const ticked = new Set(under.map(x => x.number))
+    const offered = new Set([...choices.epics, ...choices.issues].map(x => x.number))
+    const login = known?.me ?? null
+    const all = [...under.filter(x => !offered.has(x.number)), ...choices.epics, ...choices.issues]
+    const num = Math.max(0, ...all.map(x => `#${x.number}`.length))
+    const room = width - 2 - 2 - num - 1
+    const pick = (x: Ref, row: number) => {
+      const on = ticked.has(x.number)
+      const st = standing({ mine: isMine(x.assignees ?? [], login), blocked: x.blocked === true, assignees: x.assignees ?? [] })
+      return (
+        <Box key={`parent-choice-${row}`} height={1} flexShrink={0}>
+          <Button
+            key={`pick-parent-${row}`}
+            plain
+            onPress={() =>
+              busy ? undefined : acts.counted(`${on ? 'take' : 'put'} #${i.number} ${on ? 'out of' : 'under'} #${x.number}`, () => acts.setParent(i, x.number, !on, [...ticked]))
+            }
+          >
+            {busy ? (
+              <Text wrap="truncate-end" dimColor>
+                {`${on ? '☑' : '☐'} ${markOf(st, null).glyph} ${`#${x.number}`.padStart(num)} ${fit(x.title, room).padEnd(room)}`}
+              </Text>
+            ) : (
+              <Text wrap="truncate-end">
+                {on ? '☑ ' : '☐ '}
+                {d.markText(markOf(st, null))}
+                <Text color="suggestion">{`#${x.number}`.padStart(num)}</Text>
+                <Text dimColor={st === 'blocked'}>{` ${fit(x.title, room).padEnd(room)}`}</Text>
+              </Text>
+            )}
+          </Button>
+        </Box>
+      )
+    }
+    const lines: RenderChildren[] = [
+      <Box key="parent-choice-0" height={1} flexShrink={0}>
+        <Button
+          key="pick-parent-0"
+          plain
+          onPress={() =>
+            busy
+              ? undefined
+              : ticked.size === 0
+              ? acts.toggleParents(i, [])
+              : acts.counted(`take #${i.number} out of ${[...ticked].map(n => `#${n}`).join(', ')}`, () => acts.setParent(i, null, false, [...ticked]))
+          }
+        >
+          <Text dimColor={busy}>{`No ${word.toLowerCase()}`.padEnd(width)}</Text>
+        </Button>
+      </Box>,
+    ]
+    for (const x of [...under.filter(x => !offered.has(x.number)), ...choices.epics]) lines.push(pick(x, lines.length))
+    if (choices.issues.length > 0) {
+      const name = ` ${i.milestone?.title ?? ''} `
+      lines.push(
+        <Box key="parent-rule" height={1} flexShrink={0}>
+          <Text dimColor>{`────${fit(name, width - 8)}`.padEnd(width, '─')}</Text>
+        </Box>,
+      )
+      for (const x of choices.issues) lines.push(pick(x, lines.length))
+    }
+    const at = startAt(want, lines.length)
+    listShown.set(id, { list: 'parents', lines: lines.length, room: f.overlayRoom(at) - 1, first: 0 })
+    return f.overlay('parent-list', width, lines, scroll, head, at)
   }
 }

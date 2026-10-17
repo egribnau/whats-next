@@ -1,12 +1,12 @@
 import { atom, memberOf, read, update } from 'claude-code'
-import type { EngineInterface, Hook, Register, RenderInput } from 'claude-code'
+import type { EngineInterface, Hook, Register, RenderInput, Timer } from 'claude-code'
 
-import type { Comment, Detail, Epic, Epics, IssueDetail, IssueRow, Label, Milestone, MilestoneFilter, Overview, Ref, Repo, RepoLabels, Setup, TokenSource } from '../types'
+import type { Comment, Detail, Epic, Epics, IssueDetail, IssueRow, Label, Milestone, MilestoneFilter, Overview, ParentChoices, Ref, Repo, RepoLabels, Setup, TokenSource } from '../types'
 import { draw, type Look } from './draw'
 import { inMilestone } from './epics'
 import { configureCommand, type Forge, type TokenSetting } from './forge'
 import { ALL, filterWord, sameFilter } from './filter'
-import { changesSince, loadRepo, noteChange, type Known } from './load'
+import { changesSince, loadRepo, noteChange, noteParents, parentsSince, type Known } from './load'
 import { anyToken, checkForge, findRepo, trackerFor, type Tokens } from './setup'
 import { message, slug, type Send, type Tracker } from './tracker'
 import * as step from './where'
@@ -32,6 +32,8 @@ const overview = atom({ plugin: 'whats-next', key: 'overview' } as const, { kind
 // Per pane, keyed by its id: what was loaded for the issue it shows. Each
 // pane opens issues in a detail of its own; where it is, hooks/panes.ts.
 const detail = atom({ plugin: 'whats-next', key: 'detail' } as const, { kind: 'idle' })
+const parentChoices = atom({ plugin: 'whats-next', key: 'parentChoices' } as const, { kind: 'idle' })
+const spinner = atom({ plugin: 'whats-next', key: 'spinner' } as const, 0)
 const iconsChosen = atom({ plugin: 'whats-next', key: 'icons' } as const, null)
 const compactChosen = atom({ plugin: 'whats-next', key: 'compact' } as const, null)
 const epics = atom({ plugin: 'whats-next', key: 'epics' } as const, { kind: 'idle' })
@@ -168,6 +170,7 @@ async function load($: EngineInterface, r: Repo) {
     me: ready ? s.login : null,
     features: ready ? s.features : { time: true, deps: true, epics: true },
     changes: changesSince(`${r.host}/${slug(r)}`, await $.clock.now()),
+    parents: parentsSince(`${r.host}/${slug(r)}`, await $.clock.now()),
   })
   const { issuesError, epicsError } = loaded
   if (issuesError !== null) await update($, overview, (): Overview => ({ kind: 'error', message: issuesError }))
@@ -317,14 +320,24 @@ const issuesRead = new Map<string, IssueDetail>()
 // Reads issue `n` for the detail view of pane `pane`, or shows it from memory.
 // `quiet`: the detail shown stays until the new one is read, with no
 // Loading … between, as after a label's change with the labels list open.
+// Refusal `error` in red under the heading of pane `pane`'s detail, or
+// none for null. Only a new action or Refresh takes it away: a detail read
+// again keeps it, as a press made before it may finish after it.
+async function showRefusal($: EngineInterface, pane: string, error: string | null) {
+  await update($, memberOf(detail, { requestId: pane }), (d): Detail => (d.kind === 'ok' ? { ...d, error: error ?? undefined } : d))
+}
+
 async function loadDetail($: EngineInterface, r: Repo, pane: string, n: number, quiet = false) {
   const k = known
+  // A refusal shown on this issue stays (showRefusal), and so does a wait.
+  const kept = (d: Detail) => (d.kind === 'ok' && d.issue.number === n ? d.error : undefined)
+  const still = (d: Detail) => (d.kind === 'ok' && d.issue.number === n && waits.has(pane) ? d.busy : undefined)
   if (!k) return
   const key = `${r.host}/${slug(r)}#${n}`
   const cached = issuesRead.get(key)
-  // The issue it is a child of, from what the lists know: one request the
+  // The issues it is a child of, from what the lists know: one request the
   // first time, none once Next has asked.
-  const parentOf = () => k.parent(n)
+  const parentsOf = () => k.parents(n)
   // Whether it waits on an open issue that is not its own child, for its mark.
   const blockedOf = (i: IssueDetail) => k.blocked(i, (i.blockedBy ?? []).filter(x => x.state === 'open').map(x => x.number))
   // The issues it holds, for its Children lines: an epic's, or on GitHub
@@ -334,18 +347,18 @@ async function loadDetail($: EngineInterface, r: Repo, pane: string, n: number, 
     return all ? all.map(c => ({ number: c.number, title: c.title, state: c.state, assignees: c.assignees, blocked: c.blocked, milestone: c.milestone })) : null
   }
   if (cached) {
-    const [parent, blocked, children] = await Promise.all([parentOf(), blockedOf(cached), childrenOf()])
-    await update($, memberOf(detail, { requestId: pane }), (): Detail => ({ kind: 'ok', issue: cached, parent, blocked, children }))
+    const [parents, blocked, children] = await Promise.all([parentsOf(), blockedOf(cached), childrenOf()])
+    await update($, memberOf(detail, { requestId: pane }), (d): Detail => ({ kind: 'ok', issue: cached, parents, blocked, children, error: kept(d), busy: still(d) }))
     return
   }
   if (!quiet) await update($, memberOf(detail, { requestId: pane }), (): Detail => ({ kind: 'loading', number: n }))
   try {
-    const [issue, parent, children] = await Promise.all([k.issue(n), parentOf(), childrenOf()])
+    const [issue, parents, children] = await Promise.all([k.issue(n), parentsOf(), childrenOf()])
     const blocked = await blockedOf(issue)
     issuesRead.set(key, issue)
     // Another issue opened while this one loaded wins.
     if (issueOf(await placeOf($, pane)) !== n) return
-    await update($, memberOf(detail, { requestId: pane }), (): Detail => ({ kind: 'ok', issue, parent, blocked, children }))
+    await update($, memberOf(detail, { requestId: pane }), (d): Detail => ({ kind: 'ok', issue, parents, blocked, children, error: kept(d), busy: still(d) }))
   } catch (err) {
     if (issueOf(await placeOf($, pane)) !== n) return
     await update($, memberOf(detail, { requestId: pane }), (): Detail => ({ kind: 'error', number: n, message: message(err) }))
@@ -404,6 +417,7 @@ async function backToList($: EngineInterface, pane: string) {
 // opens them itself, in its own order, once What's next is placed.
 async function refresh($: EngineInterface, follow = true): Promise<Repo | null> {
   issuesRead.clear()
+  for (const pane of [PANE, EPICS_PANE, MILESTONES_PANE]) await showRefusal($, pane, null)
   await update($, repoLabels, (): RepoLabels => ({ kind: 'idle' }))
   await update($, childrenToo, () => true)
   const r = await check($)
@@ -486,10 +500,11 @@ async function writeIssue(
   const r = await read($, repo)
   const k = known
   if (!r || !k) return false
+  await showRefusal($, pane, null)
   const why = await change(k.tracker)
   if (why !== null) {
     const error = `Could not ${what} #${n}${after}: ${why.replace(/\.$/, '')}.`
-    await update($, memberOf(detail, { requestId: pane }), (d): Detail => (d.kind === 'ok' ? { ...d, error } : d))
+    await showRefusal($, pane, error)
     return false
   }
   const key = `${r.host}/${slug(r)}#${n}`
@@ -549,10 +564,64 @@ async function toggleLabels($: EngineInterface, pane: string) {
   await counted($, 'Labels', () => loadLabels($))
 }
 
-// Label `l` added to issue `i`, or taken off; the pane stays on the issue,
-// its labels list open for the next.
-const setLabel = ($: EngineInterface, pane: string, i: IssueDetail, l: Label, on: boolean) =>
-  writeIssue($, pane, i.number, t => t.label(i.number, l, on), on ? `add ${l.name} to` : `take ${l.name} off`, true)
+// Panes whose detail waits on the forge, each with the press it waits for,
+// so a press that finishes late ends only its own wait.
+const waits = new Map<string, symbol>()
+
+// The spinner's timer while any pane waits; the frame it turns to, the
+// spinner atom.
+let spinning: Timer | null = null
+const SPIN_MS = 120
+
+// Pane `pane`'s detail waiting on the forge for its `list`, its spinner
+// turning (DRAWING-issue.md, The labels list): a function that ends this
+// wait, or null when it waits already and the press is passed over.
+async function wait($: EngineInterface, pane: string, list: 'labels' | 'milestones' | 'parents') {
+  if (waits.has(pane)) return null
+  const mine = Symbol(pane)
+  waits.set(pane, mine)
+  const at = memberOf(detail, { requestId: pane })
+  await update($, at, (d): Detail => (d.kind === 'ok' ? { ...d, busy: { list } } : d))
+  spinning ??= $.clock.every(SPIN_MS, () => void update($, spinner, n => n + 1))
+  return async () => {
+    if (waits.get(pane) !== mine) return
+    waits.delete(pane)
+    if (waits.size === 0) {
+      spinning?.cancel()
+      spinning = null
+    }
+    await update($, at, (d): Detail => (d.kind === 'ok' ? { ...d, busy: undefined } : d))
+  }
+}
+
+// Label `l` added to issue `i`, or taken off; the tick moves at once, and
+// the pane stays on the issue, its labels list open for the next, waiting
+// until the forge answers (DRAWING-issue.md, The labels list).
+async function setLabel($: EngineInterface, pane: string, i: IssueDetail, l: Label, on: boolean) {
+  const free = await wait($, pane, 'labels')
+  if (!free) return false
+  try {
+    const at = memberOf(detail, { requestId: pane })
+    const tick = (has: boolean) =>
+      update($, at, (d): Detail => {
+        if (d.kind !== 'ok' || d.issue.number !== i.number) return d
+        const others = d.issue.labels.filter(x => x.name !== l.name)
+        return { ...d, issue: { ...d.issue, labels: has ? [...others, { name: l.name, color: l.color }] : others } }
+      })
+    await tick(on)
+    const change = async (t: Tracker) => {
+      const why = await t.label(i.number, l, on)
+      await free()
+      return why
+    }
+    const done = await writeIssue($, pane, i.number, change, on ? `add ${l.name} to` : `take ${l.name} off`, true)
+    // Refused: the tick as it was, the refusal kept.
+    if (!done) await tick(!on)
+    return done
+  } finally {
+    await free()
+  }
+}
 
 // The milestone list of pane `pane` opened, or shut (DRAWING-issue.md, The
 // milestone list): the open milestones are known already, so nothing is asked.
@@ -569,6 +638,24 @@ async function toggleMilestones($: EngineInterface, pane: string) {
 async function setMilestone($: EngineInterface, pane: string, i: IssueDetail, m: Milestone | null, children: number[]) {
   await go($, pane, step.shutMilestones)
   const from = i.milestone?.title ?? null
+  const free = await wait($, pane, 'milestones')
+  if (!free) return false
+  try {
+    // The Milestone line shows the move at once; refused, as it was.
+    const at = memberOf(detail, { requestId: pane })
+    const show = (to: IssueDetail['milestone']) =>
+      update($, at, (d): Detail => (d.kind === 'ok' && d.issue.number === i.number ? { ...d, issue: { ...d.issue, milestone: to } } : d))
+    await show(m ? { title: m.title, due: m.due } : null)
+    const done = await moveMilestone($, pane, i, m, children, from, free)
+    if (!done) await show(i.milestone)
+    return done
+  } finally {
+    await free()
+  }
+}
+
+// setMilestone's move, its wait ended by `free` once the forge answered.
+async function moveMilestone($: EngineInterface, pane: string, i: IssueDetail, m: Milestone | null, children: number[], from: string | null, free: () => Promise<void>) {
   const kids = (await read($, childrenToo)) ? children : []
   const moved: number[] = []
   const refused: { n: number; why: string }[] = []
@@ -580,6 +667,7 @@ async function setMilestone($: EngineInterface, pane: string, i: IssueDetail, m:
       if (no === null) moved.push(c)
       else refused.push({ n: c, why: no })
     }
+    await free()
     return null
   }
   const done = await writeIssue(
@@ -598,9 +686,75 @@ async function setMilestone($: EngineInterface, pane: string, i: IssueDetail, m:
     const error = m
       ? `Moved #${i.number} to ${m.title}; could not move ${which}: ${first.why.replace(/\.$/, '')}.`
       : `Took #${i.number} out of ${from ?? 'its milestone'}; could not take ${which} out: ${first.why.replace(/\.$/, '')}.`
-    await update($, memberOf(detail, { requestId: pane }), (d): Detail => (d.kind === 'ok' ? { ...d, error } : d))
+    await showRefusal($, pane, error)
   }
   return done
+}
+
+// The epic list of pane `pane` opened, or shut (DRAWING-issue.md, The epic
+// list); opened, what it offers issue `i` is worked out from what is known,
+// its `children` left out.
+async function toggleParents($: EngineInterface, pane: string, i: IssueDetail, children: number[]) {
+  await update($, filterOpen, () => false)
+  await go($, pane, step.toggleParents)
+  const k = known
+  if (!(await placeOf($, pane)).parents || !k) return
+  const at = memberOf(parentChoices, { requestId: pane })
+  await update($, at, (): ParentChoices => ({ kind: 'loading', number: i.number }))
+  const { epics, issues } = await k.choices(i.number, i.milestone?.title ?? null, children)
+  await update($, at, (): ParentChoices => ({ kind: 'ok', number: i.number, epics, issues }))
+}
+
+// Issue `i` put under `p`, or taken out of it; for null taken out of each of
+// `parents`, the ones it is under. The ticks move at once, and the pane
+// stays on the issue, its epic list open for the next (DRAWING-issue.md, The
+// epic list). What the forge took is remembered over its lists for a while,
+// as GitHub's answer the old parent for some seconds.
+async function setParent($: EngineInterface, pane: string, i: IssueDetail, p: number | null, on: boolean, parents: number[]) {
+  const put = p !== null && on
+  const free = await wait($, pane, 'parents')
+  if (!free) return false
+  try {
+    const r = await read($, repo)
+    const at = memberOf(detail, { requestId: pane })
+    const shown = await read($, at)
+    const offered = await read($, memberOf(parentChoices, { requestId: pane }))
+    const was = shown.kind === 'ok' ? (shown.parents ?? []) : []
+    const refOf = (n: number) =>
+      was.find(x => x.number === n) ?? (offered.kind === 'ok' ? [...offered.epics, ...offered.issues].find(x => x.number === n) : undefined)
+    const nested = known?.tracker.nested === true
+    const tick = async (under: number[]) =>
+      update($, at, (d): Detail =>
+        d.kind === 'ok' && d.issue.number === i.number ? { ...d, parents: under.map(refOf).filter(x => x !== undefined) } : d,
+      )
+    const after = (under: number[], q: number, put: boolean) => (put ? (nested ? [q] : [...under, q]) : under.filter(x => x !== q))
+    await tick(p === null ? [] : after(parents, p, put))
+    let under = [...parents]
+    let done = true
+    const asked = p === null ? parents : [p]
+    const last = asked[asked.length - 1]
+    for (const q of asked) {
+      const change = async (t: Tracker) => {
+        const why = await t.parent(i.number, q, put)
+        if (q === last) await free()
+        if (why !== null) return why
+        under = after(under, q, put)
+        known?.setParents(i.number, under)
+        if (r) noteParents(`${r.host}/${slug(r)}`, i.number, under, await $.clock.now())
+        return null
+      }
+      done = await writeIssue($, pane, i.number, change, put ? 'put' : 'take', true, put ? ` under #${q}` : ` out of #${q}`, () => [q])
+      if (!done) {
+        await free()
+        break
+      }
+    }
+    // Refused: the ticks as the forge left them, the refusal kept.
+    if (!done) await tick(under)
+    return done
+  } finally {
+    await free()
+  }
 }
 
 // Children too ticked if not, unticked if so.
@@ -680,16 +834,18 @@ const focusMoved: Hook<'ui.focus'> = async ($, e, next) => {
     return next({ ...e, element: h.first })
   }
   lastFocus.set(e.requestId, e.element)
-  // A line out of the labels list's or the milestone list's view scrolls
-  // that list, not the detail.
+  // A line out of the labels list's, the milestone list's or the epic
+  // list's view scrolls that list, not the detail.
   const listed = listShown.get(e.requestId)
-  const line = /^(toggle-label|pick-milestone)-(\d+)$/.exec(e.element ?? '')
-  if (listed && line && (line[1] === 'toggle-label') === (listed.list === 'labels')) {
+  const line = /^(toggle-label|pick-milestone|pick-parent)-(\d+)$/.exec(e.element ?? '')
+  const lists = { 'toggle-label': 'labels', 'pick-milestone': 'milestones', 'pick-parent': 'parents' } as const
+  if (listed && line && lists[line[1] as keyof typeof lists] === listed.list) {
     const k = Number(line[2]) + listed.first
     const place = await placeOf($, e.requestId)
-    const off = (listed.list === 'labels' ? place.labels : place.milestones)?.scroll ?? 0
+    const off = place[listed.list]?.scroll ?? 0
     const to = k < off ? k : k >= off + listed.room ? k - listed.room + 1 : off
-    if (to !== off) await go($, e.requestId, w => (listed.list === 'labels' ? step.scrollLabels(w, to) : step.scrollMilestones(w, to)))
+    const scroll = { labels: step.scrollLabels, milestones: step.scrollMilestones, parents: step.scrollParents }[listed.list]
+    if (to !== off) await go($, e.requestId, w => scroll(w, to))
     return next(e)
   }
   const v = views.get(e.requestId)
@@ -800,6 +956,8 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
     toggleMilestones: () => toggleMilestones($, id),
     setMilestone: (i, m, children) => setMilestone($, id, i, m, children),
     toggleChildrenToo: () => toggleChildrenToo($),
+    toggleParents: (i, children) => toggleParents($, id, i, children),
+    setParent: (i, p, on, parents) => setParent($, id, i, p, on, parents),
     workOn: i => workOn($, i, { pane: id, issue: i }),
     openUrl: url => openUrl($, url),
     counted: (label, action) => counted($, label, action),
