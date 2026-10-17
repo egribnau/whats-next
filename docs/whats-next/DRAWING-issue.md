@@ -248,7 +248,7 @@ a red number for Blocked by).
 
 | Line | Mark | Number | At the right |
 |---|---|---|---|
-| Epic, open | `●` `⊘` `◌` `○` as Marks, as its own heading: its children not counted as what blocks it | blue | with others, or blocked and held by someone: their name, dim |
+| Epic, open | `●` `⊘` `◌` `○` as Marks, as its own heading: its children not counted as what blocks it | blue | with others, or blocked and held by someone: their name, dim; then `→`, which opens it (#74) |
 | Children, open | `●` `⊘` `◌` `○` as Marks; blocked dims the mark and title | blue | with others, or blocked and held by someone: their name, dim |
 | Children, closed | none: one grey line for them all, `✓ 3 closed`, in the mark column, as under an unfolded epic in the lists (DRAWING.md, Counts and states) | | nothing |
 | Blocked by, open | `●` `⊘` `◌` `○` as Marks; blocked dims the mark and title | blue, as everywhere: the key says it holds this one up | with others, or blocked and held by someone: their name, dim |
@@ -257,21 +257,27 @@ a red number for Blocked by).
 | Pull request, merged | none | blue | `merged` purple |
 | any, closed | `✓`, the whole line grey, no strikethrough | grey | nothing |
 
-Epic, Children, Blocked by and Blocks lines are plain buttons: the focus inverts them,
+Children, Blocked by and Blocks lines are plain buttons: the focus inverts them,
 Enter opens that issue in the same pane, and Back returns. Pull request
-lines are not buttons.
+lines are not buttons. An Epic (or Parent) line is a plain button that
+opens the epic list where the token may write, and plain text where it
+may not; its `→` at the right is a button of its own that opens the
+epic, so the line looks the same either way, and Tab stops on the line,
+then on `→` (#74, decided 1B-i and 6b).
 
 The facts of the issue detail, top to bottom, in the facts line's order
 and then what only the detail has: Epic (or Parent), Children, Blocked by, Blocks,
 Due, Milestone, Labels, then Branch, Time, PRs (or MRs), Commits. How old
 it is is on the line under the title (#62, built 0.68.0, decided 3a).
 
-First among the facts, the issue it is a child of, if any:
-one line drawn and pressed as a Blocked by line, number blue, under the
-key `Epic`, or `Parent` when it is not an epic (on GitHub any issue can
-be a parent) (#62, built 0.68.0, decided 3b). On Forgejo and GitLab an
-epic has none: an epic that depends on it waits for it, as in Epics, so
-it is under Blocks (0.74.3).
+First among the facts, the issues it is a child of, if any: one line
+each, drawn as a Blocked by line, number blue, under the key `Epic`, or
+`Parent` when it is not an epic (on GitHub any issue can be a parent)
+(#62, built 0.68.0, decided 3b). On Forgejo and GitLab an issue can be
+under several epics, each a line, the key on the first only, in the epic
+list's order; on GitHub it has one parent at most (#74, decided 3A). On
+Forgejo and GitLab an epic has none: an epic that depends on it waits
+for it, as in Epics, so it is under Blocks (0.74.3).
 
 Then its children, under the key `Children`, on every forge: an epic's on
 Forgejo (the issues it depends on) and GitLab (the issues it links as
@@ -295,7 +301,11 @@ one, but Labels where the token may change them: there it is a plain
 button, as an Epic line, that opens the labels list, and with no labels
 it reads `none`, dim, so there is something to press (#66, decided 1D).
 Milestone the same, where the token may change it: a plain button that
-opens the milestone list, `none`, dim, without one (#68).
+opens the milestone list, `none`, dim, without one (#68). Epic the same:
+an issue without a parent has `Epic  none`, on GitHub `Parent  none`,
+dim, a plain button that opens the epic list, where the token may write;
+not on an epic on Forgejo and GitLab, which has no parent there (#74,
+decided 1B and 5a-i).
 
 Drawn by: `refLine`, under its key by `keyed`, in `issueView` (hooks/views/issue.tsx).
 
@@ -346,9 +356,11 @@ first line `Milestone`, dim, and `✕`; `m` again, the Milestone line again
 or `☰` shut it too. Opening it shuts the menu and the labels list, and the
 other way round.
 
-Its lines are drawn as the milestone filter's list (decided 2i): the open
+Its lines are drawn as the milestone filter's list (decided 2i):
+`No milestone` first, as the epic list's `No epic` (#74, decided 7; the
+milestone filter keeps `None` last, as it is a filter), then the open
 milestones in the filter's order, due first (ORDERING.md), on GitLab a
-parent group's too, then `No milestone`; each name padded to a column, its
+parent group's too; each name padded to a column, its
 due date in the short form after it, no `⧗` (DRAWING.md, Due dates). The
 issue's own is bold; an issue in a closed milestone has that one first,
 grey and bold, its date dim. Each line is a plain button: Enter moves the
@@ -361,8 +373,8 @@ known already, so opening it asks nothing; until they are, it reads
 `No milestone`.
 
 An issue with open children in its own milestone (an epic's, or on
-GitHub its sub-issues) has `☑ Children too` first, the count of those
-children at the right, and a dim rule under it. It is a plain button: a
+GitHub its sub-issues) has `☑ Children too` first, before `No milestone`,
+the count of those children at the right, and a dim rule under it. It is a plain button: a
 press ticks or unticks it and the list stays open. Ticked, a move takes
 those children along, to the same milestone or out of it; closed children
 and those in another milestone stay. It starts ticked, and the choice is
@@ -374,4 +386,58 @@ refused, no child is tried; a child refused, the rest still move, and the
 refusal says so: `Moved #29 to v1.2; could not move #31: 403 Forbidden.`
 
 Drawn by: `milestoneList` in `issueView` (hooks/views/issue.tsx), in the
+frame's `overlay`.
+
+## The epic list
+
+From the issue detail, the issue is put under an epic, or taken out of
+one, in the epic list; on GitHub it is the parent list (#74). It opens
+from Epic in the menu (hotkey `e`, after Milestone; `Parent` on GitHub)
+and from the Epic (or Parent) line, `none` too, both only where the
+token may write, and is drawn, placed, scrolled and shut as the labels
+list: its frame on the first Epic line's row, its first line `Epic`
+(`Parent` on GitHub), dim, and `✕`; `e` again, the line again or `☰`
+shut it too. Opening it shuts the menu, the labels list and the
+milestone list, and the other way round (decided 1B, 5a-i).
+
+Its first line is `No epic` (`No parent` on GitHub), a plain button
+that takes the issue out of every epic it is under (decided 2a-i). Then
+the open epics in the Epics pane's order: by milestone, due first, then
+those without one (ORDERING.md), the issue itself left out. Each line
+is drawn as a detail line naming an issue (Detail lines that name an
+issue): its mark, number and title, after a box, `☑` the issue is under
+it, `☐` not (decided 2a-i, 3A). No milestone names the groups.
+
+On GitHub, where any issue can be a parent, the open issues of the
+issue's own milestone follow, under a dim rule naming it,
+`──── v1.1 ────`, the epics and the issue's own children left out, so
+there is no loop; an issue without a milestone has the epics alone, as
+those without one can be thousands (decided 2b-ii). A parent in neither
+comes first after `No parent`, ticked. Every open issue, through a
+search, is for later (#102).
+
+Each line is a plain button: Enter ticks it or unticks it at once, and
+the list stays open, as the labels list (decided 3A). On Forgejo and
+GitLab an issue can be under several epics; on GitHub it has one parent,
+so ticking another moves it and unticks the old. Only the parent
+changes: the issue keeps its milestone, which the Milestone line changes
+(decided 4a). The Epic lines, What's next, Epics and Milestones show the
+change at once, as after Labels. The epic's own text, such as a list of
+its children in its description, is left alone. The open epics are known
+already, so opening it asks nothing for them; on GitHub the issues of
+the milestone are asked when it opens, `Loading …` under the rule until
+they come. A list the forge refused is no list: only `No epic`.
+
+On the forge it is: on Forgejo a dependency added to the epic or taken
+off it (the epic depends on its children); on GitLab a related link
+added or taken away (it has no direction); on GitHub the issue made a
+sub-issue of the parent, or taken out of it.
+
+A refusal is red under the heading, in the words put under and take out
+of (decided 5b-i): `Could not put #29 under #12: 403 Forbidden.`,
+`Could not take #29 out of #12: 403 Forbidden.` On GitHub a move is two
+requests, and one may fail alone: `Put #29 under #40; could not take it
+out of #12: 403 Forbidden.`
+
+Drawn by: `epicList` in `issueView` (hooks/views/issue.tsx), in the
 frame's `overlay`.

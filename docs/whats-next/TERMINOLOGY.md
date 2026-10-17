@@ -20,7 +20,7 @@ DRAWING.md and DRAWING-issue.md.
 | label | A forge label of the repo, on GitLab of its groups too; an issue has any number of them. |
 | epic | An issue with the Epic label (the label is a setting). |
 | child | An issue an epic holds, or on GitHub any issue. On Forgejo: an issue the epic depends on, other epics left out (an epic that depends on another waits for it). On GitLab: an issue it links as related, other epics left out (a related link has no direction). On GitHub: a sub-issue, of any issue. Only on GitHub does a child have children of its own, and unfold to them. The issue detail lists them under `Children`, apart from Blocked by (#86). |
-| parent | The issue an issue is a child of: its epic, or on GitHub any parent issue. The issue detail names it `Epic`, or `Parent` when it is not an epic (#62, built 0.68.0). |
+| parent | The issue an issue is a child of: its epic, or on GitHub any parent issue. On Forgejo and GitLab an issue can have several, on GitHub one. The issue detail names it `Epic`, or `Parent` when it is not an epic (#62, built 0.68.0). An issue is put under a parent, and taken out of it (#74). |
 | pull request | A forge's request to merge a branch, `PR`; GitLab calls it a merge request, `MR`, numbered `!61`. The panes use the forge's word: `PRs` or `MRs` (#62, built 0.68.0). |
 | blocker | An open issue that another one waits on. On Forgejo: a dependency. On GitLab EE: a blocking link. On GitHub: a "blocked by" relation. |
 | blocked by, blocks | The two sides of a blocker, as the issue detail lists them. |
@@ -70,7 +70,8 @@ free one is blocked.
 | bottom line | The last line of a pane. |
 | menu | `☰` at the right of a pane's top row: what can be done there, each with its hotkey (#62, built 0.68.0). |
 | labels list | The repo's labels, opened over the issue detail from Labels, each with a box saying whether the issue has it (#66). |
-| milestone list | The open milestones and No milestone, opened over the issue detail from Milestone, the issue's own in bold (#68). |
+| milestone list | No milestone and the open milestones, opened over the issue detail from Milestone, the issue's own in bold (#68). |
+| epic list | No epic and the open epics, opened over the issue detail from Epic or the Epic line, each with a box saying whether the issue is under it; on GitHub the parent list, with the open issues of its milestone too (#74). |
 | Children too | The milestone list's box: ticked, a move takes the issue's open children in its old milestone along (#68). |
 | help page | The page that says what each sign and colour means, the same in every pane; shown in place of the list or detail, left with Back (#63, built 0.70.0). |
 
@@ -85,6 +86,7 @@ free one is blocked.
 | Close, Reopen | Closes or reopens the issue or milestone. |
 | Labels | Opens the labels list, where a press adds a label to the issue or takes it off (#66). |
 | Milestone | Opens the milestone list, where a press moves the issue to that milestone, or out of its own (#68). |
+| Epic, Parent | Opens the epic list (on GitHub, Parent: the parent list), where a press puts the issue under that epic or takes it out of it (#74). |
 | Open in Browser | Opens the issue's or milestone's page on the forge. |
 | Help | Opens the help page; `/next help` opens it in What's next (#63, built 0.70.0). |
 
@@ -94,7 +96,7 @@ free one is blocked.
 |---|---|
 | setup | The steps checked before the panes show: Repo, Forge, Token, Access, Actions. |
 | token | An access token for the forge, from its token setting only. |
-| read only | What's Next may read but not assign, close or change labels or milestone; setup's Actions step says why. |
+| read only | What's Next may read but not assign, close or change labels, milestone or epic; setup's Actions step says why. |
 | Compact, Icons | The settings for how lists and buttons look. |
 
 ## When something is not known
@@ -117,3 +119,4 @@ free one is blocked.
 | focus (for where you work) | where you work | Focus is the keyboard's: the control Enter presses; #57. |
 | Work on this | Prompt | Too long for the top row; what it does first is put the issue in the prompt; #62. |
 | No milestone (in the milestone filter) | None | Shorter on the filter's button; the Epics rule over epics without one keeps No milestone; #62. |
+| unparent | take out of | Put under and take out of, as the milestone list's move to and take out of; #74. |
