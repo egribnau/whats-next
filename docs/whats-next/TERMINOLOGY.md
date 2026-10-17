@@ -17,6 +17,7 @@ DRAWING.md and DRAWING-issue.md.
 | all closed | Every issue of a milestone, or every child of an epic, closed. |
 | milestone | A forge milestone of the repo. |
 | due date | The date an issue or a milestone is due, if it has one. |
+| due soon | An open issue whose due date that counts (the earliest of its own, its epics' and its milestone's) is within 7 days or past; such issues come first in Next, the Queue and In progress (#70). |
 | label | A forge label of the repo, on GitLab of its groups too; an issue has any number of them. |
 | epic | An issue with the Epic label (the label is a setting). |
 | child | An issue an epic holds, or on GitHub any issue. On Forgejo: an issue the epic depends on, other epics left out (an epic that depends on another waits for it). On GitLab: an issue it links as related, other epics left out (a related link has no direction). On GitHub: a sub-issue, of any issue. Only on GitHub does a child have children of its own, and unfold to them. The issue detail lists them under `Children`, apart from Blocked by (#86). |
@@ -54,12 +55,13 @@ free one is blocked.
 | In progress | Your open issues. |
 | Next | The available issue to take now. |
 | Queue | The available issues after Next. |
+| heading | A dim line in the Queue naming the scope of the rows under it: Due soon, In epic #30, In v1.2, then the milestone filter's name for the rest (#70). Not a rule. |
 | where you work | Where What's next starts from within the milestone filter: the epic (else the milestone) of your issue in progress, else of your last closed one; it widens to the parent epic, the milestone, then the rest of the filter (#57, built 0.67.0). |
 | Last closed | The issue you closed last within the milestone filter, from anywhere (the pane, the browser, a commit); What's next follows on from it (#57, built 0.67.0). |
 | Epics | The pane of epics, grouped by milestone. |
 | Milestones | The pane of open milestones, then Closed. |
 | Closed | The section of closed milestones in Milestones. |
-| milestone filter | The choice What's next and Epics share, and what it is set to: a milestone, None (the issues without one; `/next` says no milestone), or All; they show only what is in it. It starts where you work: your issue in progress's milestone, else your last closed issue's, else the one due first (#57, built 0.67.0). |
+| milestone filter | The choice What's next and Epics share, and what it is set to: a milestone, None (the issues without one; `/next` says no milestone), or All; they show only what is in it. It starts where you work: your issue in progress's milestone, else your last closed issue's, else the one due first (#57, built 0.67.0); on All when an issue of yours or an available one is due soon outside it (#70). |
 | detail | An issue or a milestone shown in place of the list, left with Back. |
 | section | A part of a list or a detail under a rule that folds with + or −: Closed in Milestones; Issues and Description in the milestone detail. |
 | row | One issue, epic or milestone in a list. |

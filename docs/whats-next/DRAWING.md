@@ -78,6 +78,7 @@ joins the table:
 | Milestone detail, the Issues rule | `− Issues · 8 open` |
 | Milestones pane, the Closed rule | `+ Closed · 3` |
 | What's next, section rules | `In progress · 2`; Next and the Queue have none: what the Queue's limit leaves out is the line `and 14 more` under its available rows, above the blocked ones (#57, built 0.67.0) |
+| What's next, issues due soon outside the milestone filter | a dim line after the last issue due soon shown, `and 2 more in All`; with none shown due soon, after Next, `2 due soon in All`; a press sets the filter to All; none outside, no line (#70) |
 | Bottom lines | none: the bottom of a pane counts nothing, its rows and rules already do; it is a rule (Rules; #65, built 0.74.0, decided 1, 1b and 3; 0.74.2) |
 
 When every issue or child is closed, it says `all closed`, in every place
@@ -112,7 +113,7 @@ right edge. One look everywhere (#45, built 0.65.0):
 | Where | Drawn as |
 |---|---|
 | What's next | `── In progress · 2`, `── Next`, `── Queue`; never what the milestone filter is set to, which the filter already shows (#57, built 0.67.0) |
-| What's next, by scope | `── Next · in epic #30`; the Queue split by scope, `── Queue · in epic #30`, `── Queue · in v1.2` (the milestone of the issue you work from, only with the milestone filter on All), then `── Queue` for the rest, no count: the scope said once, in the rule, never on a row; the epic number blue (#57, built 0.67.0) |
+| What's next, by scope | `── Next · due soon`, `── Next · in epic #30`, `── Next · in v1.2`: the scope Next was taken from (ORDERING.md, Scopes), the epic number blue; the rest of the filter, no scope part. The Queue is one rule, `── Queue`, its scopes split by headings (Headings), never on a row (#57, built 0.67.0; one Queue rule, #70) |
 | What's next, above the bottom line | `── Last closed · 2h ago · in epic #30`: how long ago, then its epic, the number blue; no epic part when it was in none. One grey closed row under it, `✓` in the mark column, that opens its detail; nothing closed by you in the milestone filter, no rule and no row (#57, built 0.67.0) |
 | Epics, a milestone's group | `── v0.3.0 · ⧗ 30 Oct · 9/17 closed` |
 | Milestones, closed milestones | `+ Closed · 3` |
@@ -121,6 +122,25 @@ right edge. One look everywhere (#45, built 0.65.0):
 | Every pane and detail, its bottom line | `── What's Next · v0.74.2`: the bottom line is this rule, its version from the manifest (no copyright or license since 0.74.2), one target that opens the repository named in the manifest; an empty line above it as above every rule, no dim line and no counts (#65, built 0.74.0, decided 1, 1b and 3) |
 
 Drawn by: `rule`, for every rule.
+
+## Headings
+
+A heading names the scope of the rows under it, inside the Queue: a dim
+line, no `──` and no line after it, its text starting in the number
+column (#70). It is not a rule: no empty line of its own before it; it
+takes the empty line a row takes (none with Compact), so a heading reads
+as part of its section.
+
+- `Due soon`, `In epic #30` (the number blue), `In v1.2` (the milestone
+  of the issue you work from, only with the filter on All), then the rest
+  of the filter under its name: `In All`, `In v1.3`, `No milestone`
+  (ORDERING.md, Scopes)
+- headings only when the Queue holds issues of two scopes or more; with
+  one, `── Queue` and its rows, as before
+- what the limit leaves out, `and 14 more`, and the blocked rows come
+  after the last heading's rows, under none of them
+
+Drawn by: `heading`.
 
 ## Due dates
 
@@ -163,6 +183,8 @@ same rule and joins the table:
 | Epics, Milestones and the milestone detail, an epic's facts line | short | `· ⧗ 14 Oct`, after blocked by and unblocks, as on any issue row; no longer on the for-you line under it (#64, built 0.72.0; was the line under a folded epic, #45) |
 | Issue detail, the issue's milestone | short | `· ⧗ 30 Oct` after the milestone's name, on the Milestone line (#62, built 0.68.0, decided 1a) |
 | An issue row's facts line, the issue's own due date | short | `· ⧗ 14 Oct`, after blocked by, before the milestone (DRAWING-issue.md, The facts line; #45, built 0.66.0) |
+| An issue row's facts line, its epic's due date when that is the one that counts | short | `· #30 ⧗ 19 Oct`, the number blue, in the place of its own (DRAWING-issue.md, The facts line; #70) |
+| An issue row's facts line, its milestone's due date when that is the one that counts | short | `v1.3 ⧗ 20 Oct`, after the milestone's name; only where the line shows the milestone (#70) |
 | Issue detail, the issue's own due date | long | `30 Oct, in 19 days` on the Due line |
 | Milestone detail, an open milestone | long | `30 Oct, in 19 days` on the Due line, as the issue detail (#62, built 0.68.0, decided 6) |
 | Milestone detail, a closed milestone | short, dim | `30 Oct` on the Due line: once closed, how far off no longer matters |

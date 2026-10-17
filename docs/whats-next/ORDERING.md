@@ -4,19 +4,39 @@ How What's next chooses Next and orders the Queue: which issues come
 first, and why. How the result is drawn (the rules, `↦ n`, Last closed)
 is in DRAWING.md and DRAWING-issue.md; the words are in TERMINOLOGY.md.
 A change to the order changes this file first, then the code, then the
-canvas artboard "What's next, ordered by where you are".
+canvas artboards "What's next, ordered by where you are" and "Due soon
+first".
 
-Built in 0.67.0 (#57). Where you work is not called focus: focus is the
+Built in 0.67.0 (#57); due soon first in 1.1.0 (#70). Where you work is not called focus: focus is the
 keyboard's.
 
 ## In short
 
-Next follows on from what you did last. What's next finds where you
-work, takes the issues there first and widens step by step
-when nothing is left. Within each step it orders by a few keys, one
-after the other: no score, no weights. A row's place is explained by
-the step it is in (said in the rule) and the key that set it apart
-(said on its facts line).
+An issue due soon comes first, wherever it is. After those, Next follows
+on from what you did last: What's next finds where you work, takes the
+issues there first and widens step by step when nothing is left. Within
+each step it orders by a few keys, one after the other: no score, no
+weights. A row's place is explained by the step it is in (said in the
+Next rule and the Queue's headings) and the key that set it apart (said
+on its facts line).
+
+## Due soon
+
+An issue is due soon when the due date that counts for it is within 7
+days or past. The 7 days are the same as for an amber due date
+(DRAWING.md, Due dates).
+
+The due date that counts is the earliest of:
+
+- its own due date;
+- the due date of each epic it is in (on Forgejo and GitLab an epic is
+  an issue, with a due date of its own; a GitHub parent issue has none);
+- its milestone's due date.
+
+The earliest, not the nearest: a child is done when its epic is due,
+whatever its own date says. GitHub issues have no due date of their own,
+so only a milestone's counts there. How a row shows the date that counts,
+and whose it is: DRAWING-issue.md, The facts line.
 
 ## Where you work
 
@@ -42,12 +62,17 @@ The available issues of the milestone filter are taken in scopes, in this order:
 
 | # | Scope | Holds |
 |---|---|---|
+| 0 | due soon | every available issue of the milestone filter that is due soon, whichever scope below holds it |
 | 1 | the epic | the open children in the milestone filter of the epic you work in |
 | 2 | its parent epic | the parent's open children in the milestone filter, those of 1 left out; only on GitHub, where a child can have children; each parent up the tree is a scope of its own |
 | 3 | the milestone | the rest of the milestone of the issue you work from, in the milestone filter |
 | 4 | the milestone filter | the rest of the filter |
 
-A scope with nothing in it is skipped. When the issue you work from is in
+An issue is in the first scope that holds it, so one due soon is in 0
+and nowhere else. Within 0, the earliest due date that counts comes
+first; a tie goes to the scope below that holds it (so a milestone due
+soon, which gives all its issues the same date, keeps where you work
+first), then to the keys. A scope with nothing in it is skipped. When the issue you work from is in
 no epic, scopes 1 and 2 are skipped; without an issue to work from,
 only 4 is left, and the order is the keys below over the whole filter. With the
 filter set to a milestone, 3 and 4 hold the same issues, so 3 is left
@@ -58,6 +83,10 @@ The Queue goes on from there, through the same scopes, until its limit
 (QUEUE_LIMIT). Blocked issues met on the way go to the blocked rows at
 the end, as today.
 
+An issue due soon outside the milestone filter is not taken: the filter
+holds. The available ones are counted, and the pane says how many under
+Due soon (DRAWING.md, Rules).
+
 ## Keys: the order within a scope
 
 Within a scope, issues are sorted by these keys; a tie on one goes to
@@ -65,19 +94,24 @@ the next.
 
 | # | Key | First | Known from |
 |---|---|---|---|
-| 1 | due soon | an issue due within 7 days or past due, earliest first; the rest after, as equals | its own due date; without one, its milestone's (only makes a difference in All and the epic scopes) |
-| 2 | unblocks | the most open issues waiting on it first | GitHub: the list counts them (`issue_dependencies_summary`); Forgejo and GitLab: the blocker checks made so far, so what the walk has not checked counts as 0 |
-| 3 | age | oldest first, then lowest number | the lists |
+| 1 | unblocks | the most open issues waiting on it first | GitHub: the list counts them (`issue_dependencies_summary`); Forgejo and GitLab: the blocker checks made so far, so what the walk has not checked counts as 0 |
+| 2 | age | oldest first, then lowest number | the lists |
 
-The 7 days are the same as for an amber due date (DRAWING.md, Due
-dates). GitHub issues have no due date of their own, so only a
-milestone's counts there.
+Due soon is a scope, not a key: until 1.1.0 (#70) it was the first key
+within each scope, so an issue due tomorrow waited behind every issue of
+the epic you work in.
 
 The keys are read from what is known when the walk starts; the walk
 does not reorder as it checks blockers. The order is the same for the
 same answers from the forge.
 
 Priority is not a key: there is no source for it yet.
+
+## In progress
+
+Your issues in progress come due soon first, the earliest due date that
+counts first; the rest after, oldest first, as before. Their order does
+not change where you work: that stays the one updated last.
 
 ## Where the milestone filter starts
 
@@ -87,7 +121,10 @@ On `/next` the milestone filter starts where you work:
 2. with none, the milestone of the last issue you closed in the repo;
 3. with neither, the open milestone due first, as before #57.
 
-That issue without a milestone starts it on None. A milestone you
+That issue without a milestone starts it on None. When an open issue of
+yours or an available one is due soon and not in that milestone, it
+starts on All instead, so an issue due soon is in front when you open
+the pane (#70). A milestone you
 choose yourself holds until the next `/next`.
 
 ## What it asks the forge
@@ -101,6 +138,7 @@ Asked the first time the milestone filter is set to something, then remembered u
 | the epic of your last closed issue, when you work from an issue in progress | 1 | the same | the same | the same |
 | the epic's children | 1, or none when Epics already loaded them | its dependencies | its related links | its sub-issues |
 | each parent epic up the tree | 2 each (its parent, its children) | | | GitHub only |
+| the children of each open epic due soon, for the due date that counts | 1 each, or none when Epics or the scopes already loaded them | its dependencies | its related links | none: a parent issue has no due date |
 
 All asks without a milestone; None asks for issues without one
 (Forgejo cannot filter that: its list is filtered here). The All answer is
@@ -117,6 +155,8 @@ already makes.
 
 - plugins/whats-next/hooks/next.ts: `order`, the scopes and keys, pure;
   `pickNext` walks its result for blockers.
+- plugins/whats-next/hooks/load.ts: `dueBy`, the due date that counts for
+  an issue; `whatsNext` orders In progress with it.
 - plugins/whats-next/hooks/load.ts, what is known of the repo (`loadRepo`
   builds it): its `whatsNext` finds where you work and builds the scopes;
   `lastClosedIn`, `epicsAbove` (through `parentOf`) and `membersOf` ask and
