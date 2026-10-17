@@ -254,7 +254,7 @@ async function showFilter($: EngineInterface) {
   if (!known) return
   const options = known.options()
   const wanted = await read($, filterChosen)
-  const set = options.find(o => sameFilter(wanted, o.filter))?.filter ?? (await known.startingFilter(options))
+  const set = options.find(o => sameFilter(wanted, o.filter))?.filter ?? (await known.startingFilter(options, await $.clock.now()))
   await update($, filterShown, () => ({ options, set }))
 }
 
@@ -935,6 +935,7 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
     today: await $.clock.now(),
     filter: await read($, filterShown),
     unblocks: m.kind === 'ok' ? m.unblocks : {},
+    dueBy: m.kind === 'ok' ? m.dueBy : {},
   }
   const built = await builtManifest($)
   const acts: Acts = {
@@ -1048,7 +1049,8 @@ async function runNext($: EngineInterface, name: string, word: string) {
     return { text: `What's Next is ready for ${slug(r)}: no open issues.` }
   }
   const scope = o.next ? o.scopes[o.next.number] : undefined
-  const where = scope?.kind === 'epic' ? `, in epic #${scope.number}` : scope?.kind === 'milestone' ? `, in ${scope.title}` : ''
+  const where =
+    scope?.kind === 'due' ? ', due soon' : scope?.kind === 'epic' ? `, in epic #${scope.number}` : scope?.kind === 'milestone' ? `, in ${scope.title}` : ''
   const then = o.next ? `next is #${o.next.number}${where}` : o.blocked.length > 0 ? 'nothing available' : 'nothing else open'
   const filter = shownFilter && shownFilter.set.kind !== 'all' ? ` (${showing})` : ''
   return { text: `What's Next is ready for ${slug(r)}: ${o.inProgress.length} in progress, ${then}${filter}.` }

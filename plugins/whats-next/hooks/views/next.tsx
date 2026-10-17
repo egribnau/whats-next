@@ -2,7 +2,7 @@ import type { RenderChildren } from 'claude-code'
 
 import type { IssueRow, Overview, Repo, Scope } from '../../types'
 import { age, fit, type Part } from '../draw'
-import { within as withinFilter } from '../filter'
+import { ALL, filterLabel, within as withinFilter } from '../filter'
 import { waitingText } from '../next'
 import { slug } from '../tracker'
 import { PANE } from '../panes'
@@ -36,25 +36,33 @@ export async function nextView(p: Pane, f: Frame, m: Exclude<Overview, { kind: '
     // the lines under them line up whatever the numbers. Numbers sit at
     // its right, their last digits in line. Last closed shares it.
     const numWidth = Math.max(...[...listed, ...(m.lastClosed ? [m.lastClosed] : [])].map(i => `#${i.number}`.length), 0) + 1
-    // Where an issue of Next or the Queue was taken from, after the
-    // section's name in its rule (ORDERING.md, Scopes): `in epic #30`, the
-    // number blue, or `in v1.2`; nothing for the rest of the milestone filter.
-    const scopePart = (sc: Scope | undefined): Part[] =>
+    // Where an issue of Next or the Queue was taken from, after Next's name
+    // in its rule (ORDERING.md, Scopes): `due soon`, `in epic #30`, the
+    // number blue, or `in v1.2`; nothing for the rest of the milestone
+    // filter. `In` starts a heading in the Queue.
+    const scopePart = (sc: Scope | undefined, In = 'in'): Part[] =>
       sc === undefined
         ? []
-        : sc.kind === 'milestone'
-          ? [{ text: `in ${sc.title}` }]
-          : [
-              {
-                text: `in epic #${sc.number}`,
-                node: [
-                  <Text key="in" dimColor>
-                    {'in epic '}
-                  </Text>,
-                  <Text key="epic" color="suggestion">{`#${sc.number}`}</Text>,
-                ],
-              },
-            ]
+        : sc.kind === 'due'
+          ? [{ text: In === 'in' ? 'due soon' : 'Due soon' }]
+          : sc.kind === 'milestone'
+            ? [{ text: `${In} ${sc.title}` }]
+            : [
+                {
+                  text: `${In} epic #${sc.number}`,
+                  node: [
+                    <Text key="in" dimColor>
+                      {`${In} epic `}
+                    </Text>,
+                    <Text key="epic" color="suggestion">{`#${sc.number}`}</Text>,
+                  ],
+                },
+              ]
+    // A heading's words in the Queue (DRAWING.md, Headings): its scope's,
+    // the rest of the filter under its name, `In All`, `In v1.3`, `No milestone`.
+    const shownSet = p.look.filter?.set ?? ALL
+    const headingPart = (sc: Scope | undefined): Part =>
+      sc === undefined ? { text: shownSet.kind === 'none' ? 'No milestone' : `In ${filterLabel(shownSet)}` } : (scopePart(sc, 'In')[0] as Part)
     const sameScope = (a: Scope | undefined, b: Scope | undefined) =>
       a === b || (a !== undefined && b !== undefined && JSON.stringify(a) === JSON.stringify(b))
     // The mark says how a row stands for you: yours in In progress,
@@ -102,6 +110,24 @@ export async function nextView(p: Pane, f: Frame, m: Exclude<Overview, { kind: '
         )
       }
       for (const i of m.inProgress) pushRow(row(i, 'progress'))
+      // The available issues due soon outside the milestone filter: one dim
+      // line after the last one due soon shown, else after Next, that sets
+      // the filter to All (DRAWING.md, Counts and states).
+      const isDue = (i: IssueRow) => m.scopes[i.number]?.kind === 'due'
+      const lastDue = [...(m.next && isDue(m.next) ? [m.next] : []), ...m.queue.filter(isDue)].at(-1)
+      const pushOutside = () => {
+        if (m.dueOutside === 0 || shownSet.kind === 'all') return
+        const text = lastDue ? `and ${m.dueOutside} more in All` : `${m.dueOutside} due soon in All`
+        pushRow(
+          <Box key="due-outside" flexDirection="column" marginBottom={gap} flexShrink={0}>
+            <Button key="due-outside-all" plain onPress={() => acts.setFilter(ALL, filterLabel(ALL))}>
+              <Text wrap="truncate-end" dimColor>
+                {`${' '.repeat(2)}${text}`}
+              </Text>
+            </Button>
+          </Box>,
+        )
+      }
       pushRule(d.rule('next', 'Next', scopePart(m.next ? m.scopes[m.next.number] : undefined)))
       if (m.next) pushRow(row(m.next, 'next'))
       else if (m.blocked.length > 0) {
@@ -118,18 +144,20 @@ export async function nextView(p: Pane, f: Frame, m: Exclude<Overview, { kind: '
           </Box>,
         )
       }
-      // The Queue shows up to its limit, a rule for each scope it takes
-      // from and no count (DRAWING.md, Rules); the issues past the limit
-      // are counted on one line under the available ones.
+      if (!lastDue || lastDue === m.next) pushOutside()
+      // The Queue shows up to its limit under one rule, no count; a heading
+      // for each scope it takes from, when it takes from two or more
+      // (DRAWING.md, Headings); the issues past the limit are counted on one
+      // line under the available ones.
       if (later.length > 0) {
-        if (m.queue.length === 0) pushRule(d.rule('queue', 'Queue'))
+        pushRule(d.rule('queue', 'Queue'))
+        const headed = new Set(m.queue.map(i => JSON.stringify(m.scopes[i.number] ?? null))).size > 1
         m.queue.forEach((i, k) => {
           const sc = m.scopes[i.number]
           const before = k > 0 ? m.queue[k - 1] : undefined
-          if (k === 0 || !sameScope(sc, before && m.scopes[before.number])) {
-            pushRule(d.rule(k === 0 ? 'queue' : `queue-${i.number}`, 'Queue', scopePart(sc)))
-          }
+          if (headed && (k === 0 || !sameScope(sc, before && m.scopes[before.number]))) rows.push(d.heading(`heading-${i.number}`, headingPart(sc)))
           pushRow(row(i, 'queue'))
+          if (i === lastDue) pushOutside()
         })
         if (m.more > 0) {
           pushRow(

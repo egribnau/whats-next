@@ -64,10 +64,14 @@ export type IssueRow = {
 // shows it: when it closed and the epic it was in.
 export type LastClosed = { number: number; title: string; closed: string; milestone: string | null; epic: number | null }
 
-// Where an issue of Next or the Queue was taken from: the epic you work in
-// (or a parent of it), the milestone of the issue you work from, or null
-// for the rest of the milestone filter.
-export type Scope = { kind: 'epic'; number: number } | { kind: 'milestone'; title: string }
+// Where an issue of Next or the Queue was taken from: due soon, the epic
+// you work in (or a parent of it), the milestone of the issue you work
+// from, or null for the rest of the milestone filter.
+export type Scope = { kind: 'due' } | { kind: 'epic'; number: number } | { kind: 'milestone'; title: string }
+
+// The due date that counts for an issue (docs/whats-next/ORDERING.md, Due
+// soon) when it is not its own: an epic's it is in, or its milestone's.
+export type DueBy = { due: string; from: { kind: 'epic'; number: number } | { kind: 'milestone'; title: string } }
 
 // An unassigned issue found blocked on the way to Next: `by` names its open
 // dependencies.
@@ -85,7 +89,10 @@ export type Overview =
   // `scopes`: the scope each issue of Next and the Queue was taken from, by
   // number, none for the rest of the milestone filter. `unblocks`: how many
   // open issues wait on each, as far as known. `lastClosed`: the issue you
-  // closed last within the milestone filter.
+  // closed last within the milestone filter. `dueBy`: the due date that
+  // counts, by number, for each open issue due soon by an epic's or its
+  // milestone's. `dueOutside`: the available issues due soon outside the
+  // milestone filter.
   | {
       kind: 'ok'
       inProgress: IssueRow[]
@@ -95,6 +102,8 @@ export type Overview =
       more: number
       scopes: Record<number, Scope>
       unblocks: Record<number, number>
+      dueBy: Record<number, DueBy>
+      dueOutside: number
       lastClosed: LastClosed | null
     }
   | { kind: 'error'; message: string }

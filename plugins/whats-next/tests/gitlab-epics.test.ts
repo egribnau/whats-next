@@ -657,8 +657,11 @@ const LINKS: Record<number, unknown[]> = {
 
 type Opened = { id: string; title?: string }
 
-function paneWorld(on: On, enterprise: boolean, asked: string[] = [], opened: Opened[] = []) {
+// `epicDue`: the epic's own due date, none when left out.
+function paneWorld(on: On, enterprise: boolean, asked: string[] = [], opened: Opened[] = [], epicDue?: string) {
   const clock = mock.clock(on)
+  const epic = epicDue ? { ...EPIC, due_date: epicDue } : EPIC
+  const open = OPEN.map(i => (i === EPIC ? epic : i))
   on('process.run', (_$, e) => {
     const cmd = e.argv.join(' ')
     const stdout =
@@ -700,14 +703,14 @@ function paneWorld(on: On, enterprise: boolean, asked: string[] = [], opened: Op
     if (p === `${base}/labels`) return list(LABELS)
     if (p === `${base}/issues`) {
       const label = u.searchParams.get('labels')
-      if (label !== null) return list(label.toLowerCase() === 'epic' ? [EPIC] : [])
+      if (label !== null) return list(label.toLowerCase() === 'epic' ? [epic] : [])
       if (u.searchParams.get('scope') === 'assigned_to_me') return list([MINE])
-      return list(OPEN)
+      return list(open)
     }
     const links = new RegExp(`^${base}/issues/(\\d+)/links$`).exec(p)
     if (links) return list(LINKS[Number(links[1])] ?? [])
     const one = new RegExp(`^${base}/issues/(\\d+)(/.*)?$`).exec(p)
-    if (one && !one[2]) return reply(200, OPEN.find(i => i.iid === Number(one[1])) ?? issue(H, Number(one[1])))
+    if (one && !one[2]) return reply(200, open.find(i => i.iid === Number(one[1])) ?? issue(H, Number(one[1])))
     if (one?.[2] === '/notes' || one?.[2] === '/related_merge_requests') return reply(200, [])
     return reply(404, { message: '404 Not Found' })
   })
@@ -844,4 +847,19 @@ test('members: an origin in another case than the project path still finds the l
   }
   const t = gitlab(fakeSend(mixed), r, 'glpat-x', null, 'Epic')
   expect((await t.members(20))?.sort((a, b) => a - b)).toEqual([10, 33, 37, 44, 51])
+})
+
+// Due soon (#70): a GitLab epic is an issue with a due date of its own; its
+// children are due by it when it comes first.
+test('gitlab.com: an epic due soon makes its children due soon, the epic named with its date on their facts line', GL, async ($, on) => {
+  const clock = paneWorld(on, false, [], [], '2026-10-12')
+  await clock.set(NOW)
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const found = (await ui.findAll({ type: 'Text' })) as Found[]
+  const all = found.map(t => t.text)
+  expect(all).toContain(rule('Next · due soon'))
+  expect(all).toContain('○ #33 Issue 33')
+  expect(all.some(t => t.startsWith('#20 ⧗ 12 Oct'))).toBe(true)
+  expect(found.find(t => t.text === '#20')?.props.color).toBe('suggestion')
 })

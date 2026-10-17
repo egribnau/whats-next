@@ -155,8 +155,8 @@ already makes.
 
 - plugins/whats-next/hooks/next.ts: `order`, the scopes and keys, pure;
   `pickNext` walks its result for blockers.
-- plugins/whats-next/hooks/load.ts: `dueBy`, the due date that counts for
-  an issue; `whatsNext` orders In progress with it.
+- plugins/whats-next/hooks/load.ts: `dueDates`, the due date that counts
+  for each open issue; `whatsNext` orders In progress with it.
 - plugins/whats-next/hooks/load.ts, what is known of the repo (`loadRepo`
   builds it): its `whatsNext` finds where you work and builds the scopes;
   `lastClosedIn`, `epicsAbove` (through `parentOf`) and `membersOf` ask and

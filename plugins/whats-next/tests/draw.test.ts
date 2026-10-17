@@ -31,6 +31,7 @@ const lookOf = (more: Partial<Look> = {}): Look => ({
   today: NOW,
   filter: null,
   unblocks: { 29: 2 },
+  dueBy: {},
   ...more,
 })
 
@@ -87,6 +88,37 @@ test('the facts line leaves out the milestone the milestone filter is set to, an
   const row = draw(look).issueRow({ ...ISSUE, labels: [], due: null }, { key: 'issue-29', buttonKey: 'pick-29', numWidth: 4, standing: 'yours', onPress: () => undefined })
   const facts = elements(tree(row)).find(n => n.type === 'Text' && key(n) === 'facts')
   expect(words(facts)).toBe('✎ 3w')
+})
+
+// The due date that counts (ORDERING.md, Due soon), when it is not the
+// issue's own: one due date on the line, and whose.
+const factsWith = (look: Look, due: string | null) => {
+  const row = draw(look).issueRow({ ...ISSUE, due }, { key: 'issue-29', buttonKey: 'pick-29', numWidth: 4, standing: 'available', onPress: () => undefined })
+  return elements(tree(row)).find(n => n.type === 'Text' && key(n) === 'facts')
+}
+
+test("the facts line: an epic's due date that counts takes the place of its own, with the epic's number", () => {
+  const facts = factsWith(lookOf({ dueBy: { 29: { due: '2026-10-11T00:00:00Z', from: { kind: 'epic', number: 30 } } } }), '2026-10-20T00:00:00Z')
+  expect(words(facts)).toBe('↦ 2 · #30 ⧗ 11 Oct · v1.2 · docs · ✎ 3w')
+  const texts = elements(facts).filter(n => n.type === 'Text')
+  expect(texts.find(t => words(t) === '#30')?.props.color).toBe('suggestion')
+  expect(texts.find(t => words(t) === '⧗ 11 Oct')?.props.color).toBe('warning')
+})
+
+test("the facts line: a milestone's due date that counts follows its name; where the milestone is left out, its own date as before", () => {
+  const dueBy = { 29: { due: '2026-10-10T00:00:00Z', from: { kind: 'milestone' as const, title: 'v1.2' } } }
+  const facts = factsWith(lookOf({ dueBy }), '2026-10-20T00:00:00Z')
+  expect(words(facts)).toBe('↦ 2 · v1.2 ⧗ 10 Oct · docs · ✎ 3w')
+  expect(elements(facts).find(n => n.type === 'Text' && words(n) === '⧗ 10 Oct')?.props.color).toBe('warning')
+  const inIt = factsWith(lookOf({ dueBy, filter: { options: [], set: { kind: 'milestone', title: 'v1.2' } } }), '2026-10-20T00:00:00Z')
+  expect(words(inIt)).toBe('↦ 2 · ⧗ 20 Oct · docs · ✎ 3w')
+})
+
+test('a heading: its words dim, from the number column', () => {
+  const d = draw(lookOf())
+  const h = d.heading('heading-43', { text: 'In epic #30' })
+  expect(words(tree(h))).toBe('  In epic #30')
+  expect((h as unknown as Node).props.dimColor).toBe(true)
 })
 
 test('with Compact on a row leaves no empty line under it', () => {

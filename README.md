@@ -7,8 +7,8 @@ GitLab or GitHub.
 
 <img src="docs/whats-next/images/whats-next.png" alt="What's next in a terminal: an issue in progress, the next issue, the Queue and the issue closed last" width="1100">
 
-- Next: the first available issue, ordered by where you work, its due date
-  and how many issues wait on it.
+- Next: the first available issue: due soon first, then ordered by where
+  you work and how many issues wait on it.
 - Epics and milestones with their progress, folded open on their issues.
 - Assign yourself, close an issue, change its labels, milestone or epic, or
   put it into your prompt, without leaving Claude Code.
@@ -39,9 +39,11 @@ claude plugin update whats-next@egribnau-mods
 directory's `origin`:
 
 - **What's next**: your issues In progress, Next and the Queue after it.
-  Next is the first available issue: assigned to no one, not blocked. It
-  follows on from where you work: the epic or milestone of your issue in
-  progress, or of the issue you closed last.
+  Next is the first available issue: assigned to no one, not blocked. An
+  issue due within 7 days or past due comes first, by its own due date, its
+  epic's or its milestone's. After those, Next follows on from where you
+  work: the epic or milestone of your issue in progress, or of the issue
+  you closed last.
 - **Epics**: the epics of a milestone, each unfolding to its children.
 - **Milestones**: every open milestone, with its epics and issues.
 - **Milestone filter**: narrows What's next and Epics to one milestone.

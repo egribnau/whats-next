@@ -570,6 +570,24 @@ test('github.com: the milestone filter starts on the one due first and narrows t
   expect(all.some(t => t.includes('#12') || t.includes('#14'))).toBe(false)
 })
 
+// Due soon (#70): GitHub issues have no due date, so a milestone's counts.
+// v1.4 is due in three days; #22, in it, goes ahead of v1.2 where you work.
+test("github.com: an issue due soon by its milestone's date comes first, the milestone's date on its facts line", GH, async ($, on) => {
+  const V14 = milestone('v1.4', '2026-10-12T07:00:00Z', 4)
+  const clock = world(on, { mine: [MINE], open: [...OPEN, issue(22, '2026-10-03T09:00:00Z', { milestone: V14 })], milestones: [V12, V13, V14] })
+  await clock.set(NOW)
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const found = await ui.findAll({ type: 'Text' })
+  const all = found.map(t => t.text)
+  // Outside v1.2, where you work: the filter starts on All.
+  expect(((await ui.find({ key: 'milestone' })) as { props: Record<string, unknown> } | undefined)?.props.label).toBe('All ▾')
+  expect(all).toContain(rule('Next · due soon'))
+  expect(all.indexOf('○ #22 Issue 22')).toBeLessThan(all.indexOf('○ #14 Issue 14'))
+  expect(all).toContain('v1.4 ⧗ 12 Oct · ✎ 6d')
+  expect(found.find(t => t.text === '⧗ 12 Oct')?.props.color).toBe('warning')
+})
+
 test('github.com: setup passes with the open issues counted, actions unknown for a fine-grained token', GH, async ($, on) => {
   // Your issues failing keeps the steps on screen.
   world(on, { mineStatus: 500, open: OPEN })

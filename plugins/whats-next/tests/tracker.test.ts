@@ -480,6 +480,99 @@ test('where you work: unblocks counts what the walk found waiting, and orders th
   expect(again.next?.number).toBe(37)
 })
 
+// Due soon (docs/whats-next/ORDERING.md): within 7 days of NOW or past,
+// by the earliest of an issue's own due date, its epics' and its milestone's.
+const due = (i: IssueRow, on: string): IssueRow => ({ ...i, due: `${on}T00:00:00Z` })
+const EPIC_12: EpicRow = { number: 12, title: 'Issue 12', state: 'open', milestone: 'v1', due: '2026-10-12T00:00:00Z' }
+
+test('due soon: ahead of where you work, by the earliest of its own, its epic\'s and its milestone\'s due date', async () => {
+  const calls: string[] = []
+  const t = fake(
+    {
+      ...WORK,
+      open: [
+        free(row(29, '2026-09-01T00:00:00Z', 'v1')),
+        free(row(37, '2026-09-02T00:00:00Z', 'v1')),
+        free(row(43, '2026-09-20T00:00:00Z', 'v1')),
+        free(due(row(44, '2026-09-21T00:00:00Z', 'v1'), '2026-10-20')),
+        free(due(row(50, '2026-08-01T00:00:00Z'), '2026-10-10')),
+      ],
+      epics: [EPIC_12],
+      members: { 30: [41, 43, 44], 12: [37, 44] },
+    },
+    calls,
+  )
+  const known = await load(t, { me: 'alice', deps: false })
+  const next = await known.whatsNext(ALL, NOW)
+  // #50, in the rest of the filter, is due tomorrow: Next. #44 and #37 are
+  // due by epic #12, the 12th (#44's own 20th is later); on that tie the
+  // epic you work in, #30, before the milestone.
+  expect(next.next?.number).toBe(50)
+  expect(next.queue.map(i => i.number)).toEqual([44, 37, 43, 29])
+  expect(next.scopes).toEqual({
+    50: { kind: 'due' },
+    44: { kind: 'due' },
+    37: { kind: 'due' },
+    43: { kind: 'epic', number: 30 },
+    29: { kind: 'milestone', title: 'v1' },
+  })
+  // Whose due date counts, where it is not the issue's own.
+  expect(next.dueBy).toEqual({
+    44: { due: '2026-10-12T00:00:00Z', from: { kind: 'epic', number: 12 } },
+    37: { due: '2026-10-12T00:00:00Z', from: { kind: 'epic', number: 12 } },
+  })
+  expect(next.dueOutside).toBe(0)
+  // The children of the epic due soon, asked once.
+  expect(calls.filter(c => c === 'members 12')).toHaveLength(1)
+})
+
+test('due soon: a milestone due soon gives its issues one date, and where you work stays first among them', async () => {
+  // v1 is due 1 Nov: four days off.
+  const late = Date.parse('2026-10-28T12:00:00Z')
+  const known = await load(fake(WORK), { me: 'alice', deps: false, epics: false })
+  const next = await known.whatsNext(ALL, late)
+  expect([next.next?.number, ...next.queue.map(i => i.number)]).toEqual([43, 44, 29, 37, 50])
+  expect(next.scopes[43]).toEqual({ kind: 'due' })
+  expect(next.scopes[50]).toBeUndefined()
+  expect(next.dueBy[43]).toEqual({ due: '2026-11-01T00:00:00Z', from: { kind: 'milestone', title: 'v1' } })
+})
+
+test('due soon: In progress comes due soon first, the rest oldest first', async () => {
+  const mine = [row(60, '2026-09-01T00:00:00Z'), due(row(61, '2026-09-05T00:00:00Z'), '2026-10-11'), row(62, '2026-09-09T00:00:00Z')]
+  const known = await load(fake({ ...WORK, mine }), { me: 'alice', deps: false, epics: false })
+  const next = await known.whatsNext(ALL, NOW)
+  expect(next.inProgress.map(i => i.number)).toEqual([61, 60, 62])
+})
+
+test('due soon: the available issues due soon outside the milestone filter are counted, not taken', async () => {
+  const t = fake({ ...WORK, open: [...(WORK.open ?? []), free(due(row(51, '2026-09-03T00:00:00Z'), '2026-10-01'))] })
+  const known = await load(t, { me: 'alice', deps: false, epics: false })
+  // #50 and #51 have no milestone: outside v1.
+  const v1 = await known.whatsNext(ofMilestone('v1'), NOW)
+  expect(v1.dueOutside).toBe(1)
+  expect([v1.next?.number, ...v1.queue.map(i => i.number)]).not.toContain(51)
+  expect((await known.whatsNext(ALL, NOW)).dueOutside).toBe(0)
+})
+
+test('the milestone filter starts on All when an issue of yours or an available one is due soon outside where you work', async () => {
+  const options = [
+    { filter: ofMilestone('v1'), label: 'v1' },
+    { filter: NONE, label: 'None' },
+    { filter: ALL, label: 'All' },
+  ]
+  // You closed #41 in v1; #50, without a milestone, is due tomorrow.
+  const available = fake({ ...WORK, open: [...(WORK.open ?? []).filter(i => i.number !== 50), free(due(row(50, '2026-08-01T00:00:00Z'), '2026-10-10'))] })
+  expect(await (await load(available, { me: 'alice', epics: false })).startingFilter(options, NOW)).toEqual(ALL)
+  // Your own, in progress elsewhere, counts too: you work from #60 in v1,
+  // updated last; #61, without a milestone, is due tomorrow.
+  const worked = { ...row(60, '2026-09-01T00:00:00Z', 'v1'), updated: '2026-10-08T00:00:00Z' }
+  const yours = fake({ ...WORK, mine: [worked, due(row(61, '2026-09-02T00:00:00Z'), '2026-10-10')] })
+  expect(await (await load(yours, { me: 'alice', epics: false })).startingFilter(options, NOW)).toEqual(ALL)
+  // Due soon within v1 itself: v1, as before.
+  const inside = fake({ ...WORK, open: [free(due(row(29, '2026-09-01T00:00:00Z', 'v1'), '2026-10-10'))] })
+  expect(await (await load(inside, { me: 'alice', epics: false })).startingFilter(options, NOW)).toEqual(ofMilestone('v1'))
+})
+
 test('the milestone filter starts where you work: your issue in progress updated last, else the one you closed last, else the first milestone', async () => {
   const options = [
     { filter: ofMilestone('v1'), label: 'v1' },

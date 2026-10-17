@@ -1,7 +1,8 @@
-import type { Child, Epic, EpicGroup, Features, IssueDetail, IssueRow, LastClosed, MilestoneFilter, MilestoneIssue, Ref, Scope } from '../types'
+import type { Child, DueBy, Epic, EpicGroup, Features, IssueDetail, IssueRow, LastClosed, MilestoneFilter, MilestoneIssue, Ref, Scope } from '../types'
 import { blockersCount, childOf, groupsFor, isMine, roots, stands, tree, type MilestoneRow } from './epics'
 import { ALL, filterKey, filterOptions, holds, ofMilestone, sameFilter, type FilterOption } from './filter'
-import { order, pickNext, type Scoped } from './next'
+import { dueSoon } from './issue'
+import { order, pickNext, soonAt, type Scoped } from './next'
 import { message, type Closed, type EpicRow, type OpenIssue, type Tracker } from './tracker'
 
 // What is remembered of a repo until the next Refresh or /next, so the
@@ -225,6 +226,33 @@ export async function loadRepo(t: Tracker, o: { me: string | null; features: Fea
     return known.members.get(n) ?? null
   }
 
+  // The due date that counts for each open issue known (ORDERING.md, Due
+  // soon): the earliest of its own, each open epic's it is in, and its
+  // milestone's; `by` says whose when it is not its own, which wins a tie.
+  // Only an epic due soon can make an issue due soon, so only those epics'
+  // children are asked for, once each.
+  async function dueDates(now: number): Promise<Map<number, { due: string; by: DueBy['from'] | null }>> {
+    const msDue = new Map(known.milestones.map(m => [m.title, m.due]))
+    const epicsOf = new Map<number, { number: number; due: string }[]>()
+    for (const e of known.epics) {
+      if (e.state !== 'open' || e.due === null || dueSoon(e.due, now) === 'later') continue
+      const due = e.due
+      for (const n of (await membersOf(e.number)) ?? []) epicsOf.set(n, [...(epicsOf.get(n) ?? []), { number: e.number, due }])
+    }
+    const dates = new Map<number, { due: string; by: DueBy['from'] | null }>()
+    for (const i of [...known.mine, ...known.free, ...known.taken]) {
+      const ms = i.milestone !== null ? (msDue.get(i.milestone) ?? null) : null
+      const all: { due: string; by: DueBy['from'] | null }[] = [
+        ...(i.due !== null ? [{ due: i.due, by: null }] : []),
+        ...(epicsOf.get(i.number) ?? []).map(e => ({ due: e.due, by: { kind: 'epic' as const, number: e.number } })),
+        ...(ms !== null && i.milestone !== null ? [{ due: ms, by: { kind: 'milestone' as const, title: i.milestone } }] : []),
+      ]
+      const first = all.reduce<(typeof all)[number] | undefined>((a, b) => (a === undefined || Date.parse(b.due) < Date.parse(a.due) ? b : a), undefined)
+      if (first) dates.set(i.number, first)
+    }
+    return dates
+  }
+
   // Whether issue `i` waits on an open issue among `open`, its own children
   // left out: an epic on Forgejo depends on each of its children
   // (DRAWING-issue.md, Detail lines that name an issue). Its children are
@@ -305,11 +333,15 @@ export async function loadRepo(t: Tracker, o: { me: string | null; features: Fea
     // Where the milestone filter starts on /next (docs/whats-next/ORDERING.md):
     // the milestone of your issue in progress updated last, else of the
     // issue you closed last in the repo, when `options` offer it; else the
-    // first milestone offered, else All.
-    async startingFilter(options: readonly FilterOption[]): Promise<MilestoneFilter> {
+    // first milestone offered, else All. All too when an issue of yours or
+    // an available one is due soon outside it.
+    async startingFilter(options: readonly FilterOption[], now = 0): Promise<MilestoneFilter> {
       const from = latestFirst(known.mine)[0] ?? (await lastClosedIn(ALL))
       const start = from ? options.find(x => sameFilter(x.filter, ofMilestone(from.milestone))) : undefined
-      return (start ?? options.find(x => x.filter.kind === 'milestone'))?.filter ?? ALL
+      const set = (start ?? options.find(x => x.filter.kind === 'milestone'))?.filter ?? ALL
+      const dates = await dueDates(now)
+      const soon = (i: IssueRow) => soonAt(dates.get(i.number)?.due ?? null, now) < Infinity
+      return [...known.mine, ...known.free].some(i => soon(i) && !holds(set, i.milestone)) ? ALL : set
     },
 
     // What's next within `filter`: yours in it are In progress; the
@@ -321,8 +353,17 @@ export async function loadRepo(t: Tracker, o: { me: string | null; features: Fea
     // (dependencies off without the setup check knowing, an error), until
     // the next Refresh.
     async whatsNext(filter: MilestoneFilter, now = 0) {
-      const inProgress = known.mine.filter(i => holds(filter, i.milestone))
+      const dates = await dueDates(now)
+      const dueOf = (i: IssueRow) => dates.get(i.number)?.due ?? null
+      const soon = (i: IssueRow) => soonAt(dueOf(i), now)
+      // Due soon first, earliest first; the rest as they were, oldest first.
+      const inProgress = known.mine
+        .filter(i => holds(filter, i.milestone))
+        .map((i, k) => ({ i, k, at: soon(i) }))
+        .sort((a, b) => a.at - b.at || a.k - b.k)
+        .map(x => x.i)
       const free = known.free.filter(i => holds(filter, i.milestone))
+      const dueOutside = known.free.filter(i => !holds(filter, i.milestone) && soon(i) < Infinity).length
       const last = await lastClosedIn(filter)
       const from = latestFirst(inProgress)[0] ?? last
       const chain = from ? await epicsAbove(from.number) : []
@@ -338,8 +379,7 @@ export async function loadRepo(t: Tracker, o: { me: string | null; features: Fea
       const epicNumbers = new Set(known.epics.map(e => e.number))
       const waitingOn = (n: number) => [...known.blockers].filter(([w, by]) => !epicNumbers.has(w) && by?.includes(n)).length
       const unblocksOf = (i: IssueRow) => i.unblocks ?? waitingOn(i.number)
-      const due = new Map(known.milestones.map(m => [m.title, m.due]))
-      const ordered = order(free, { scopes, milestoneDue: title => due.get(title) ?? null, unblocks: unblocksOf, now })
+      const ordered = order(free, { scopes, dueOf, unblocks: unblocksOf, now })
       const { next, queue, blocked, more } = await pickNext(
         ordered.map(x => x.issue),
         blockersOf,
@@ -353,10 +393,14 @@ export async function loadRepo(t: Tracker, o: { me: string | null; features: Fea
         const n = unblocksOf(i)
         if (n > 0) unblocks[i.number] = n
       }
+      // Whose due date counts, for the facts line of every pane, where it is
+      // due soon and not the issue's own.
+      const dueBy: Record<number, DueBy> = {}
+      for (const [n, d] of dates) if (d.by && soonAt(d.due, now) < Infinity) dueBy[n] = { due: d.due, from: d.by }
       const lastClosed: LastClosed | null = last
         ? { ...last, epic: from === last ? (chain[0] ?? null) : await parentOf(last.number) }
         : null
-      return { inProgress, next, queue, blocked, more, scopes: scopeOf, unblocks, lastClosed }
+      return { inProgress, next, queue, blocked, more, scopes: scopeOf, unblocks, dueBy, dueOutside, lastClosed }
     },
 
     // The Epics pane as a tree: the groups of `filter` with only the epics

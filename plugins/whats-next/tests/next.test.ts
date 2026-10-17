@@ -179,7 +179,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
       'prio/high',
       ' · ',
       '✎ 7d',
-      ...ruleTexts('Queue', 'in v1.2'),
+      // One Queue rule; a heading for each scope, the rest under the filter's name.
+      ...ruleTexts('Queue'),
+      '  In v1.2',
       '○ #51 Issue 51',
       '○ ',
       '#51 ',
@@ -188,7 +190,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       'v1.2',
       ' · ',
       '✎ 6d',
-      ...ruleTexts('Queue'),
+      '  In All',
       '○ #29 Issue 29',
       '○ ',
       '#29 ',
@@ -670,7 +672,7 @@ test('the facts line: what blocks it, what it unblocks, its due date, milestone,
   expect(found.find(t => t.text === '↦ 1')?.props.dimColor).toBe(true)
   // No due date: nothing, and the line starts with what comes next.
   expect(all).toContain('✎ 6d')
-  expect(all.some(t => t.includes('due') || t.includes('opened'))).toBe(false)
+  expect(all.some(t => (t.includes('due') && !t.includes('due soon')) || t.includes('opened'))).toBe(false)
   // The due date in its colour: red once passed, amber within 7 days, dim otherwise.
   expect(found.find(t => t.text === '⧗ 2 Oct')?.props.color).toBe('error')
   expect(found.find(t => t.text === '⧗ 14 Oct')?.props.color).toBe('warning')
@@ -772,7 +774,7 @@ const keyed = (number: number, o: { day?: number; due?: string; milestone?: stri
 })
 const by = (o: Partial<OrderBy> = {}): OrderBy => ({
   scopes: [],
-  milestoneDue: () => null,
+  dueOf: i => i.due,
   unblocks: i => i.unblocks ?? 0,
   now: NOW,
   ...o,
@@ -788,9 +790,24 @@ test('order: due soon first, earliest first; a due date past 7 days counts as no
   expect(numbers(got)).toEqual([3, 2, 1, 4])
 })
 
-test("order: an issue without a due date takes its milestone's", () => {
-  const got = order([keyed(1), keyed(2, { milestone: 'v1.2' })], by({ milestoneDue: t => (t === 'v1.2' ? '2026-10-12T00:00:00Z' : null) }))
+test('order: the due date that counts is the one given, not only its own', () => {
+  const got = order([keyed(1), keyed(2, { milestone: 'v1.2' })], by({ dueOf: i => (i.milestone === 'v1.2' ? '2026-10-12T00:00:00Z' : null) }))
   expect(numbers(got)).toEqual([2, 1])
+  expect(got[0]?.scope).toEqual({ kind: 'due' })
+})
+
+test('order: due soon goes ahead of every scope; on the same date, the scope that holds it first', () => {
+  const epic: Scoped = { scope: { kind: 'epic', number: 30 }, holds: i => [6, 7].includes(i.number) }
+  const ms: Scoped = { scope: { kind: 'milestone', title: 'v1.2' }, holds: i => i.milestone === 'v1.2' }
+  const same = '2026-10-12T00:00:00Z'
+  const got = order(
+    [keyed(2, { milestone: 'v1.2', due: same }), keyed(3, { due: '2026-10-10T00:00:00Z' }), keyed(6, { day: 9 }), keyed(7, { day: 8, due: same })],
+    by({ scopes: [epic, ms] }),
+  )
+  // #3 in the rest of the filter is due first; #7 and #2 share a date, the
+  // epic before the milestone; then the epic's #6.
+  expect(numbers(got)).toEqual([3, 7, 2, 6])
+  expect(got.map(o => o.scope)).toEqual([{ kind: 'due' }, { kind: 'due' }, { kind: 'due' }, epic.scope])
 })
 
 test('order: the most unblocked first, then the oldest, then the lowest number', () => {
@@ -798,7 +815,7 @@ test('order: the most unblocked first, then the oldest, then the lowest number',
   expect(numbers(got)).toEqual([8, 9, 1, 4, 5])
 })
 
-test('order: the scope comes first, then due soon, then unblocks, then age; each issue says its scope', () => {
+test('order: due soon first, then the scope, then unblocks, then age; each issue says its scope', () => {
   const epic: Scoped = { scope: { kind: 'epic', number: 30 }, holds: i => [6, 7].includes(i.number) }
   const ms: Scoped = { scope: { kind: 'milestone', title: 'v1.2' }, holds: i => i.milestone === 'v1.2' }
   const got = order(
@@ -811,9 +828,9 @@ test('order: the scope comes first, then due soon, then unblocks, then age; each
     ],
     by({ scopes: [epic, ms] }),
   )
-  // The epic: #7 unblocks one; v1.2: #3 due soon beats #2 unblocking two; the rest.
-  expect(numbers(got)).toEqual([7, 6, 3, 2, 1])
-  expect(got.map(o => o.scope)).toEqual([epic.scope, epic.scope, ms.scope, ms.scope, null])
+  // Due soon: #1, then #3; the epic: #7 unblocks one; v1.2: #2.
+  expect(numbers(got)).toEqual([1, 3, 7, 6, 2])
+  expect(got.map(o => o.scope)).toEqual([{ kind: 'due' }, { kind: 'due' }, epic.scope, epic.scope, ms.scope])
 })
 
 test('order: an issue two scopes hold is taken by the first', () => {
@@ -860,12 +877,15 @@ test('Next follows on in the epic of the issue you closed last; the Queue says e
   // #41 has no milestone: the milestone filter starts on No milestone.
   expect(out).toEqual(expect.objectContaining({ text: "What's Next is ready for boats/radar: 0 in progress, next is #43, in epic #30 (no milestone)." }))
   expect(all).toContain(rule('Next · in epic #30'))
-  expect(all).toContain(rule('Queue · in epic #30'))
-  expect(all).toContain(rule('Queue'))
+  expect(all.filter(t => t === rule('Queue'))).toHaveLength(1)
   const order = all.filter(t => /^○ #\d+ Issue \d+$/.test(t)).map(t => Number(/#(\d+)/.exec(t)?.[1]))
   expect(order).toEqual([43, 44, 50, 29])
-  expect(all.indexOf(rule('Queue · in epic #30'))).toBeLessThan(all.indexOf('○ #44 Issue 44'))
-  expect(all.indexOf(rule('Queue'))).toBeGreaterThan(all.indexOf('○ #44 Issue 44'))
+  // Under the one Queue rule, a heading per scope: the epic, then the
+  // rest under the filter's name.
+  expect(all.indexOf(rule('Queue'))).toBeLessThan(all.indexOf('  In epic #30'))
+  expect(all.indexOf('  In epic #30')).toBeLessThan(all.indexOf('○ #44 Issue 44'))
+  expect(all.indexOf('  No milestone')).toBeGreaterThan(all.indexOf('○ #44 Issue 44'))
+  expect(all.indexOf('  No milestone')).toBeLessThan(all.indexOf('○ #50 Issue 50'))
   // The epic's number blue, the words dim.
   expect(found.find(t => t.text === '#30')?.props.color).toBe('suggestion')
   expect(found.find(t => t.text === 'in epic ')?.props.dimColor).toBe(true)
@@ -949,8 +969,8 @@ test('with Compact on, rows have no empty line between them, but each section st
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   const boxes = (await ui.findAll({ type: 'Box' })) as unknown as { key: string; props: Record<string, unknown> }[]
   const ends = boxes.filter(b => (b.key ?? '').startsWith('end-'))
-  // Before Next, before the Queue's first part and before its second: once each.
-  expect(ends).toHaveLength(3)
+  // Before Next and before the Queue: once each; a heading has none.
+  expect(ends).toHaveLength(2)
   expect(ends.every(b => b.props.height === 1)).toBe(true)
   expect(boxes.filter(b => (b.key ?? '').startsWith('issue-')).every(b => (b.props.marginBottom ?? 0) === 0)).toBe(true)
 })
@@ -961,4 +981,73 @@ test('with Compact off, no extra empty line: the rows leave one already', TOKEN,
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   const boxes = (await ui.findAll({ type: 'Box' })) as unknown as { key: string }[]
   expect(boxes.some(b => (b.key ?? '').startsWith('end-'))).toBe(false)
+})
+
+// Due soon first (#70): #29 is due tomorrow, outside epic #30 you work in;
+// #70, in v1.3, passed its due date yesterday.
+const DUE: World = {
+  ...WORKED,
+  open: [
+    [
+      issue(50, '2026-08-20T09:00:00Z'),
+      issue(29, '2026-09-18T09:00:00Z', { due: '2026-10-10T00:00:00Z' }),
+      issue(43, '2026-09-25T09:00:00Z'),
+      issue(44, '2026-09-26T09:00:00Z'),
+      issue(70, '2026-09-27T09:00:00Z', { milestone: 'v1.3', due: '2026-10-08T00:00:00Z' }),
+    ],
+  ],
+  milestones: MILESTONES,
+}
+
+test('due soon: /next starts on All for an issue due soon elsewhere; Next and the Queue take due soon first, a heading per scope', TOKEN, async ($, on) => {
+  const clock = world(on, DUE)
+  await clock.set(NOW)
+  const out = await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const all = await texts(ui)
+  // #70 is in v1.3, not where you work: the filter starts on All.
+  expect(await filterLabel(ui)).toBe('All ▾')
+  expect(out).toEqual(expect.objectContaining({ text: "What's Next is ready for boats/radar: 0 in progress, next is #70, due soon." }))
+  expect(all).toContain(rule('Next · due soon'))
+  const order = all.filter(t => /^○ #\d+ Issue \d+$/.test(t)).map(t => Number(/#(\d+)/.exec(t)?.[1]))
+  expect(order).toEqual([70, 29, 43, 44, 50])
+  const at = (t: string) => all.indexOf(t)
+  expect(at(rule('Queue'))).toBeLessThan(at('  Due soon'))
+  expect(at('  Due soon')).toBeLessThan(at('○ #29 Issue 29'))
+  expect(at('  In epic #30')).toBeGreaterThan(at('○ #29 Issue 29'))
+  expect(at('  In All')).toBeGreaterThan(at('○ #44 Issue 44'))
+  expect(all.some(t => t.includes('in All'))).toBe(false)
+})
+
+test('due soon outside the milestone filter: a line after the last one due soon shown, that sets the filter to All', TOKEN, async ($, on) => {
+  const clock = world(on, DUE)
+  await clock.set(NOW)
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'milestone' })
+  await ui.press({ key: 'milestone-none' })
+  let all = await texts(ui)
+  // #29 is Next, the only one due soon in None; #70 is left out, counted.
+  expect(all).toContain(rule('Next · due soon'))
+  expect(all.some(t => t.includes('Issue 70'))).toBe(false)
+  expect(all.indexOf('  and 1 more in All')).toBeGreaterThan(all.indexOf('○ #29 Issue 29'))
+  expect(all.indexOf('  and 1 more in All')).toBeLessThan(all.indexOf(rule('Queue')))
+  await ui.press({ key: 'due-outside-all' })
+  expect(await filterLabel(ui)).toBe('All ▾')
+  all = await texts(ui)
+  expect(all.some(t => t.includes('more in All'))).toBe(false)
+  expect(all).toContain('○ #70 Issue 70')
+})
+
+test('due soon outside the milestone filter, none due soon in it: the line after Next says so', TOKEN, async ($, on) => {
+  const clock = world(on, { ...DUE, open: [(DUE.open?.[0] ?? []).filter(i => (i as { number: number }).number !== 29)] })
+  await clock.set(NOW)
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'milestone' })
+  await ui.press({ key: 'milestone-none' })
+  const all = await texts(ui)
+  expect(all).toContain(rule('Next · in epic #30'))
+  expect(all.indexOf('  1 due soon in All')).toBeGreaterThan(all.indexOf('○ #43 Issue 43'))
+  expect(all.indexOf('  1 due soon in All')).toBeLessThan(all.indexOf(rule('Queue')))
 })

@@ -1,6 +1,6 @@
 import type { Elements, RenderChildren, RenderSurface } from 'claude-code'
 
-import type { Epic, FilterShown, IssueRow } from '../types'
+import type { DueBy, Epic, FilterShown, IssueRow } from '../types'
 import { bar, markOf, standing, summary, tally, type Folding, type Mark, type Standing, type TreeLine } from './epics'
 import { ofMilestone, sameFilter } from './filter'
 import { day, dueSoon, dueText, readable } from './issue'
@@ -12,8 +12,9 @@ import { day, dueSoon, dueText, readable } from './issue'
 // handed in as `onPress`, so drawing changes no state.
 
 // What the drawing reads, once per render: the surface's elements, the
-// pane's width, Compact, Icons, today, the milestone filter, and how many
-// open issues wait on each issue as far as What's next knows.
+// pane's width, Compact, Icons, today, the milestone filter, how many
+// open issues wait on each issue as far as What's next knows, and whose due
+// date counts for an issue due soon by its epic's or milestone's.
 export type Look = {
   ui: Pick<Elements[RenderSurface], 'Box' | 'Text' | 'Button'>
   columns: number
@@ -22,6 +23,7 @@ export type Look = {
   today: number
   filter: FilterShown | null
   unblocks: Readonly<Record<number, number>>
+  dueBy: Readonly<Record<number, DueBy>>
 }
 
 // Text cut to its first 3 lines and `… n more lines` is cut only from 5
@@ -218,6 +220,14 @@ export function draw(look: Look) {
   // a line never starts with ` · `.
   const duePart = (key: string, iso: string | null, now: number, o: DueShown): Part[] =>
     iso ? [{ text: dueWords(iso, now, o) ?? '', node: dueDate(key, iso, now, o) }] : []
+  // A heading in the Queue (DRAWING.md, Headings): the scope of the rows
+  // under it, dim, starting in the number column; no line of its own.
+  const heading = (key: string, part: Part) => (
+    <Text key={key} wrap="truncate-end" dimColor>
+      {'  '}
+      {part.node ?? part.text}
+    </Text>
+  )
   // A line of parts `lead` columns in: one text, cut once at its end, so a
   // narrow pane cuts its last parts and never squeezes them one by one.
   const partsLine = (key: string, lead: number, parts: readonly Part[]) => (
@@ -393,14 +403,36 @@ export function draw(look: Look) {
   // issue row and an epic's alike: what blocks it, how many it unblocks, its
   // due date, its milestone (unless the list is that milestone's), its
   // labels and its age.
+  // One due date on the line: the one that counts (ORDERING.md, Due soon).
+  // An epic's in the place of its own, `#30 ⧗ 19 Oct`; a milestone's after
+  // its name, `v1.3 ⧗ 20 Oct`, where the line shows the milestone; else
+  // its own.
   const factsOf = (i: RowIssue, o: { blockedBy?: number[]; noMilestone?: boolean }): Part[] => {
     const shownFilter = look.filter
     const shownMilestone = !o.noMilestone && i.milestone !== null && !(shownFilter && sameFilter(shownFilter.set, ofMilestone(i.milestone)))
+    const by = look.dueBy[i.number]
+    const short: DueShown = { form: 'short' }
+    const whose = (key: string, name: RenderChildren, text: string, due: string): Part => ({
+      text: `${text} ${dueWords(due, today, short) ?? ''}`,
+      node: [name, <Text key={`${key}-sp`}>{' '}</Text>, dueDate(key, due, today, short)],
+    })
+    const msDue = by?.from.kind === 'milestone' && shownMilestone ? by.due : null
+    const due: Part[] =
+      by?.from.kind === 'epic'
+        ? [whose('due', <Text key="due-epic" color="suggestion">{`#${by.from.number}`}</Text>, `#${by.from.number}`, by.due)]
+        : msDue !== null
+          ? []
+          : duePart('due', i.due, today, short)
+    const milestone: Part[] = !shownMilestone
+      ? []
+      : msDue !== null
+        ? [whose('milestone-due', <Text key="due-milestone" dimColor>{i.milestone ?? ''}</Text>, i.milestone ?? '', msDue)]
+        : [{ text: i.milestone ?? '' }]
     return [
       ...(o.blockedBy && o.blockedBy.length > 0 ? [blockedPart(o.blockedBy.length)] : []),
       ...(waiting(i.number) > 0 ? [unblocksPart(waiting(i.number))] : []),
-      ...duePart('due', i.due, today, { form: 'short' }),
-      ...(shownMilestone ? [{ text: i.milestone ?? '' }] : []),
+      ...due,
+      ...milestone,
       ...(i.labels.length > 0 ? [{ text: '', node: labelTexts(i.labels) }] : []),
       ...(i.created ? [{ text: `✎ ${age(i.created, today)}` }] : []),
     ]
@@ -580,6 +612,7 @@ export function draw(look: Look) {
     unblocksPart,
     duePart,
     partsLine,
+    heading,
     rule,
     markText,
     numberText,

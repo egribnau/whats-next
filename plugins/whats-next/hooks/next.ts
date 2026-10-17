@@ -6,32 +6,36 @@ import { dueSoon } from './issue'
 export type Scoped = { scope: Scope; holds: (i: IssueRow) => boolean }
 
 // What the order needs beyond the issues: the scopes where you work,
-// widest last; each milestone's due date; how many open issues wait on an
-// issue, as far as known; and now.
+// widest last; the due date that counts for an issue; how many open issues
+// wait on an issue, as far as known; and now.
 export type OrderBy = {
   scopes: readonly Scoped[]
-  milestoneDue: (title: string) => string | null
+  dueOf: (i: IssueRow) => string | null
   unblocks: (i: IssueRow) => number
   now: number
 }
 
+// When an issue is due soon by the due date that counts for it (within 7
+// days or passed), as a time to sort by; Infinity when it is not.
+export const soonAt = (due: string | null, now: number) => (due !== null && dueSoon(due, now) !== 'later' ? Date.parse(due) : Infinity)
+
 // The available issues in the order docs/whats-next/ORDERING.md sets out:
-// by the first scope that holds each (the rest of the milestone filter
-// last), then within a scope due soon (within 7 days or passed, earliest
-// first; an issue without a due date takes its milestone's), then the most
-// unblocked, then the oldest, then the lowest number. Each with the scope it
-// was taken from, null for the rest.
+// due soon first, earliest first, whatever scope holds them; then by the
+// first scope that holds each (the rest of the milestone filter last); a
+// tie on either goes to the most unblocked, then the oldest, then the
+// lowest number. Each with the scope it was taken from, null for the rest.
 export function order(free: readonly IssueRow[], by: OrderBy): { issue: IssueRow; scope: Scope | null }[] {
   const keyed = free.map(issue => {
     const at = by.scopes.findIndex(s => s.holds(issue))
-    const due = issue.due ?? (issue.milestone !== null ? by.milestoneDue(issue.milestone) : null)
-    const soon = due !== null && dueSoon(due, by.now) !== 'later' ? Date.parse(due) : Infinity
-    return { issue, scope: at < 0 ? null : (by.scopes[at] as Scoped).scope, at: at < 0 ? by.scopes.length : at, soon, unblocks: by.unblocks(issue) }
+    const soon = soonAt(by.dueOf(issue), by.now)
+    const scope: Scope | null = soon < Infinity ? { kind: 'due' } : at < 0 ? null : (by.scopes[at] as Scoped).scope
+    return { issue, scope, at: at < 0 ? by.scopes.length : at, soon, unblocks: by.unblocks(issue) }
   })
+  // Two not due soon are both Infinity: NaN, which goes on to the scope.
   keyed.sort(
     (a, b) =>
-      a.at - b.at ||
       a.soon - b.soon ||
+      a.at - b.at ||
       b.unblocks - a.unblocks ||
       a.issue.created.localeCompare(b.issue.created) ||
       a.issue.number - b.issue.number,
