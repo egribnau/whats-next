@@ -360,8 +360,18 @@ known already, so opening it asks nothing; until they are, it reads
 `Loading …`. A milestone list the forge refused is no list: only
 `No milestone`.
 
+An issue with open children in its own milestone (an epic's, or on
+GitHub its sub-issues) has `☑ Children too` first, the count of those
+children at the right, and a dim rule under it. It is a plain button: a
+press ticks or unticks it and the list stays open. Ticked, a move takes
+those children along, to the same milestone or out of it; closed children
+and those in another milestone stay. It starts ticked, and the choice is
+kept until Refresh (#68, decided A, ticked).
+
 A refusal is red under the heading: `Could not move #29 to v1.2: 403
-Forbidden.`, `Could not take #29 out of v1.1: 403 Forbidden.`
+Forbidden.`, `Could not take #29 out of v1.1: 403 Forbidden.` The issue
+refused, no child is tried; a child refused, the rest still move, and the
+refusal says so: `Moved #29 to v1.2; could not move #31: 403 Forbidden.`
 
 Drawn by: `milestoneList` in `issueView` (hooks/views/issue.tsx), in the
 frame's `overlay`.

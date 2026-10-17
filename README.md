@@ -47,8 +47,8 @@ directory's `origin`:
 - **Milestone filter**: narrows What's next and Epics to one milestone.
 - **Issue detail**: epic, children, blockers, due date, milestone, labels,
   pull requests, commits, description and comments. Assign yourself, close,
-  reopen, add or take off a label, move it to another milestone, open in
-  the browser, or put the issue into your prompt.
+  reopen, add or take off a label, move it to another milestone (its
+  children too), open in the browser, or put the issue into your prompt.
 - **Help** (`h`): what each sign and colour means.
 
 | Command | Opens |

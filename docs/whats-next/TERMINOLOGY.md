@@ -71,6 +71,7 @@ free one is blocked.
 | menu | `☰` at the right of a pane's top row: what can be done there, each with its hotkey (#62, built 0.68.0). |
 | labels list | The repo's labels, opened over the issue detail from Labels, each with a box saying whether the issue has it (#66). |
 | milestone list | The open milestones and No milestone, opened over the issue detail from Milestone, the issue's own in bold (#68). |
+| Children too | The milestone list's box: ticked, a move takes the issue's open children in its old milestone along (#68). |
 | help page | The page that says what each sign and colour means, the same in every pane; shown in place of the list or detail, left with Back (#63, built 0.70.0). |
 
 ## Actions
