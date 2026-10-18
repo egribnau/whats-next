@@ -14,7 +14,9 @@ GitLab or GitHub.
   put it into your prompt, without leaving Claude Code.
 
 What's Next is a mod: a change to Claude Code's own interface. It needs an
-up to date version of Claude Code, in the terminal.
+up to date version of Claude Code, in the terminal. Its panes do not load on
+claude.ai or in Cowork, and in a Code session of the Claude desktop app it
+stops at setup (see [Settings](#settings)).
 
 ## Install and update
 
@@ -142,7 +144,7 @@ claude plugin marketplace add <path to your clone>
 claude plugin install whats-next@egribnau
 ```
 
-Checks and tests are listed in [CLAUDE.md](CLAUDE.md).
+Checks and tests are listed in [.claude/CLAUDE.md](.claude/CLAUDE.md).
 
 ## Licence
 
@@ -151,3 +153,22 @@ Copyright (C) 2026 Erwin Gribnau.
 What's Next is free software under the GNU Affero General Public License,
 version 3 only (`AGPL-3.0-only`): see [LICENSE](LICENSE). It comes with no
 warranty.
+
+## What it sends where
+
+What's Next talks only to the host in the repo's `origin`, over HTTPS. It
+sends nothing anywhere else: no other hosts, no usage data.
+
+| What | To | With |
+| --- | --- | --- |
+| Which forge the host runs: `/api/v1/version`, `/api/v4/version` and `/api/v3/meta` in turn, until one answers. Not asked for github.com and gitlab.com. | the repo's host | no token |
+| The repo, your account, and its issues, milestones, labels, epics and blockers; what you change: assignee, closed, labels, milestone, epic | Forgejo `https://<host>/api/v1`, GitLab `https://<host>/api/v4`, github.com `https://api.github.com`, GitHub Enterprise `https://<host>/api/v3` | the token setting for that forge and host: `Authorization` header, `PRIVATE-TOKEN` on GitLab |
+| On Forgejo, your account's tokens, to read the scopes of the one in use (matched on its last eight characters) | `https://<host>/api/v1/users/<you>/tokens` | the Forgejo token |
+
+A token goes only to the host it is for (see [What it needs](#what-it-needs)).
+
+On your computer it runs `git remote get-url origin` and `git rev-parse` to
+find the repo, and `pwd` to name the folder in setup. It runs `open` (or
+`xdg-open`) when you open an issue in the browser, and it reads its own
+`plugin.json` for its version. An issue goes into your prompt, and from there
+to Claude, only when you put it there.

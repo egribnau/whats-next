@@ -1,11 +1,12 @@
 {
   "name": "whats-next",
-  "version": "1.1.0-pre.12",
+  "version": "1.1.0-pre.13",
   "description": "What's next, epics and milestones from Forgejo, GitLab or GitHub, in docked panes",
   "author": {
     "name": "Erwin Gribnau"
   },
   "license": "AGPL-3.0-only",
+  "homepage": "https://github.com/egribnau/whats-next",
   "repository": "https://github.com/egribnau/whats-next",
   "types": "./types/index.d.ts",
   "userConfig": {
