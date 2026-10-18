@@ -80,7 +80,9 @@ export async function nextView(p: Pane, f: Frame, m: Exclude<Overview, { kind: '
     // available in Next and the Queue, blocked at the Queue's end. Next is
     // also bold; nothing has the focus until Tab or an arrow moves it.
     const STANDING = { progress: 'yours', next: 'available', queue: 'available', blocked: 'blocked' } as const
-    const row = (i: IssueRow, section: keyof typeof STANDING, blockedBy?: number[]) => {
+    // `named`: the rule or heading above the row names its milestone, so
+    // its facts line leaves it out (DRAWING-issue.md, The facts line).
+    const row = (i: IssueRow, section: keyof typeof STANDING, blockedBy?: number[], named = false) => {
       return d.issueRow(i, {
         key: `issue-${i.number}`,
         buttonKey: `pick-${i.number}`,
@@ -88,6 +90,7 @@ export async function nextView(p: Pane, f: Frame, m: Exclude<Overview, { kind: '
         standing: STANDING[section],
         bold: section === 'next',
         blockedBy,
+        noMilestone: named,
         onPress: () => openIssue(i.number),
       })
     }
@@ -140,7 +143,7 @@ export async function nextView(p: Pane, f: Frame, m: Exclude<Overview, { kind: '
         )
       }
       pushRule(d.rule('next', 'Next', scopePart(m.next ? m.scopes[m.next.number] : undefined)))
-      if (m.next) pushRow(row(m.next, 'next'))
+      if (m.next) pushRow(row(m.next, 'next', undefined, m.scopes[m.next.number]?.kind === 'milestone'))
       else if (m.blocked.length > 0) {
         pushBlock(
           <Box key="nothing-available" flexDirection="column" marginBottom={1} flexShrink={0}>
@@ -169,7 +172,7 @@ export async function nextView(p: Pane, f: Frame, m: Exclude<Overview, { kind: '
           // A heading gets the empty line a rule gets, but right under the rule.
           if (headed && k === 0) rows.push(d.heading(`heading-${i.number}`, headingPart(sc)))
           else if (headed && !sameScope(sc, before && m.scopes[before.number])) pushRule(d.heading(`heading-${i.number}`, headingPart(sc)))
-          pushRow(row(i, 'queue'))
+          pushRow(row(i, 'queue', undefined, headed && sc?.kind === 'milestone'))
           if (i === lastDue) pushOutside()
         })
         if (m.more > 0) {
