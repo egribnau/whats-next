@@ -41,10 +41,10 @@ const ISSUE = {
   repository: { full_name: 'boats/radar' },
 }
 
-// A /config row of What's Next's, installed from `marketplace`.
+// A /config row of What's Next's, installed from `marketplace`, or from a folder when it is ''.
 function row(value: string, field = 'icons', options = ['ask', 'icons', 'text'], marketplace = 'egribnau'): ConfigRow {
   return {
-    key: `whats-next@${marketplace}.${field}`,
+    key: marketplace ? `whats-next@${marketplace}.${field}` : `whats-next.${field}`,
     label: field,
     kind: 'choice',
     value,
@@ -146,14 +146,31 @@ test('Keep Text saves the setting and the buttons keep their words', { options: 
   expect(await label(ui, 'prompt')).toBe('Prompt')
 })
 
-test('a marketplace name with a dot in it still names the row the choice is saved in', { options: { token: 'secret', compact: 'off' } }, async ($, on) => {
+for (const [from, key] of [
+  ['a folder', 'whats-next.icons'],
+  ['the directory', 'whats-next@synced.icons'],
+] as const) {
+  test(`installed from ${from}, the choice is saved in its row`, { options: { token: 'secret', compact: 'off' } }, async ($, on) => {
+    const set: { key: string; value: unknown }[] = []
+    world(on, set, true, from === 'a folder' ? '' : 'synced')
+    await $.command.run(RUN)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'keep-text' })
+
+    expect(set).toEqual([{ key, value: 'text' }])
+  })
+}
+
+test('installed from another marketplace, the choice holds for the session', { options: { token: 'secret', compact: 'off' } }, async ($, on) => {
   const set: { key: string; value: unknown }[] = []
   world(on, set, true, 'alice.mods')
   await $.command.run(RUN)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'keep-text' })
+  await ui.press({ key: 'use-icons' })
 
-  expect(set).toEqual([{ key: 'whats-next@alice.mods.icons', value: 'text' }])
+  expect(set).toEqual([])
+  await ui.press({ key: 'pick-29' })
+  expect(await label(ui, 'prompt')).toBe(ICON.work)
 })
 
 test('where /config offers no Icons row, the choice holds for the session', { options: { token: 'secret', compact: 'off' } }, async ($, on) => {

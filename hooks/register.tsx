@@ -112,11 +112,28 @@ type Choice = { field: 'icons'; value: 'icons' | 'text' } | { field: 'compact'; 
 async function chooseSetting($: EngineInterface, choice: Choice) {
   if (choice.field === 'icons') await update($, iconsChosen, () => choice.value)
   else await update($, compactChosen, () => choice.value)
-  const rows = await $.config.list()
-  const row = rows.find(r => settingKey(choice.field).test(r.key))
-  if (!row) return
-  const done = await $.config.set({ key: row.key, value: choice.value })
-  if (done.deny !== undefined) $.ui.toast(`${choice.field === 'icons' ? 'Icons' : 'Compact'} not saved: ${done.deny}`)
+  const keys = new Set((await $.config.list()).map(r => r.key))
+  const done = await saveChoice($, keys, choice)
+  if (done?.deny !== undefined) $.ui.toast(`${choice.field === 'icons' ? 'Icons' : 'Compact'} not saved: ${done.deny}`)
+}
+
+// Writes a choice to its /config row among `keys`, the rows the session
+// offers: What's Next from a folder, from its marketplace, or from the
+// directory (`synced`). Each key is written out, as the directory reads a
+// setting's key only as fixed text at the call; from any other marketplace
+// the choice holds for the session only. docs/check-marketplace.sh knows
+// these keys name the marketplace.
+async function saveChoice($: EngineInterface, keys: Set<string>, choice: Choice) {
+  if (choice.field === 'icons') {
+    if (keys.has('whats-next.icons')) return $.config.set({ key: 'whats-next.icons', value: choice.value })
+    if (keys.has('whats-next@egribnau.icons')) return $.config.set({ key: 'whats-next@egribnau.icons', value: choice.value })
+    if (keys.has('whats-next@synced.icons')) return $.config.set({ key: 'whats-next@synced.icons', value: choice.value })
+  } else {
+    if (keys.has('whats-next.compact')) return $.config.set({ key: 'whats-next.compact', value: choice.value })
+    if (keys.has('whats-next@egribnau.compact')) return $.config.set({ key: 'whats-next@egribnau.compact', value: choice.value })
+    if (keys.has('whats-next@synced.compact')) return $.config.set({ key: 'whats-next@synced.compact', value: choice.value })
+  }
+  return null
 }
 
 // Each step in turn, stopping at the first that fails (hooks/setup.ts has
