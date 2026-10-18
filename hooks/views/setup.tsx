@@ -1,17 +1,9 @@
-import { atom, read } from 'claude-code'
-import type { EngineInterface, RenderChildren } from 'claude-code'
+import type { RenderChildren } from 'claude-code'
 
 import type { Repo, Setup } from '../../types'
 import { ICON } from '../draw'
 import { slug, type Tracker } from '../tracker'
 import type { Frame, Pane } from './frame'
-
-// The state this view reads (the contract in types/index.d.ts).
-const repo = atom({ plugin: 'whats-next', key: 'repo' } as const, null)
-const version = atom({ plugin: 'whats-next', key: 'version' } as const, null)
-const token = atom({ plugin: 'whats-next', key: 'token' } as const, null)
-const setup = atom({ plugin: 'whats-next', key: 'setup' } as const, { kind: 'checking' })
-const overview = atom({ plugin: 'whats-next', key: 'overview' } as const, { kind: 'idle' })
 
 // Setup: each step checked, and what to do about the one that failed; once
 // it passes, the one-time Icons and Compact choices.
@@ -121,15 +113,15 @@ function todo(s: Setup, r: Repo | null, t: Tracker | null, configure: string): s
 
 // Setup's steps, each a line: ✓ and what it found, ✗ and why, or · when
 // not reached.
-async function stepsOf($: EngineInterface, p: Pane) {
+function stepsOf(p: Pane) {
   const { draw: d } = p
   const t = p.tracker
-  const r = await read($, repo)
-  const v = await read($, version)
+  const r = p.shown.repo
+  const v = p.shown.version
   // Older code kept a word here: that counts as none found.
-  const held = await read($, token)
+  const held = p.shown.token
   const from = held && typeof held === 'object' ? held : null
-  const s = await read($, setup)
+  const s = p.shown.setup
   const tokenText = from ? `${from.host ? `for ${from.host} ` : ''}from ${from.setting}` : 'none found'
   const doneText: Record<Step, string> = {
     repo: r ? slug(r) : '',
@@ -202,11 +194,11 @@ async function stepsOf($: EngineInterface, p: Pane) {
 }
 
 // Setup passed and Icons is still ask: the one-time choice, before the list.
-export async function iconsChoice($: EngineInterface, p: Pane, f: Frame) {
+export async function iconsChoice(p: Pane, f: Frame) {
   const { draw: d, acts } = p
   const { Box, Text, Button } = p.look.ui
   const { columns } = p.look
-  const { steps } = await stepsOf($, p)
+  const { steps } = stepsOf(p)
   const glyphs = [
     { icon: ICON.refresh, name: 'refresh' },
     { icon: ICON.work, name: 'prompt' },
@@ -256,10 +248,10 @@ export async function iconsChoice($: EngineInterface, p: Pane, f: Frame) {
 
 // Icons chosen, Compact still ask: the second one-time choice, two rows
 // each way to choose by.
-export async function compactChoice($: EngineInterface, p: Pane, f: Frame) {
+export async function compactChoice(p: Pane, f: Frame) {
   const { draw: d, acts } = p
   const { Box, Text, Button } = p.look.ui
-  const { steps } = await stepsOf($, p)
+  const { steps } = stepsOf(p)
   const sample = (spaced: boolean) => [
     <Text key={`a-${spaced}`}>
       <Text color="suggestion">{'  #37 '}</Text>
@@ -306,12 +298,12 @@ export async function compactChoice($: EngineInterface, p: Pane, f: Frame) {
 // Setup itself, until it passes and What's next loads: the steps, and for
 // the one that failed what it means and what to do. `configure`: the
 // command that sets a token.
-export async function setupView($: EngineInterface, p: Pane, f: Frame, configure: string) {
+export async function setupView(p: Pane, f: Frame, configure: string) {
   const { draw: d, acts } = p
   const { Box, Button } = p.look.ui
   const t = p.tracker
-  const { steps, s, r, v, tokenText } = await stepsOf($, p)
-  const m = await read($, overview)
+  const { steps, s, r, v, tokenText } = stepsOf(p)
+  const m = p.shown.overview
   const body: RenderChildren[] = []
   if (s.kind !== 'ready' && s.kind !== 'checking') {
     const about = intro(s, r, t, v, tokenText)

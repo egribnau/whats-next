@@ -1,7 +1,7 @@
 import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, Hook, Register, RenderInput, Timer } from 'claude-code'
 
-import type { Comment, Detail, Epic, IssueDetail, IssueRow, Issues, Label, LabelFilter, Milestone, MilestoneFilter, Overview, ParentChoices, Ref, Repo, RepoLabels, Setup, TokenSource } from '../types'
+import type { Comment, Detail, Epic, IssueDetail, IssueRow, Issues, Label, LabelFilter, Milestone, MilestoneFilter, Overview, ParentChoices, Ref, Repo, RepoLabels, Setup, TokenSource, Where } from '../types'
 import { draw, type Look } from './draw'
 import { inMilestone } from './epics'
 import { configureCommand, type Forge, type TokenSetting } from './forge'
@@ -10,9 +10,9 @@ import { changesSince, loadRepo, noteChange, noteParents, parentsSince, type Kno
 import { anyToken, checkForge, findRepo, trackerFor, type Tokens } from './setup'
 import { message, slug, type Send, type Tracker } from './tracker'
 import * as step from './where'
-import { issueOf } from './where'
-import { go, ISSUES_PANE, MILESTONES_PANE, milestoneShown, PANE, placeOf } from './panes'
-import { frame, hidden, listShown, views, type Acts, type Pane } from './views/frame'
+import { HERE, issueOf, milestoneOf } from './where'
+import { ISSUES_PANE, MILESTONES_PANE, PANE } from './panes'
+import { frame, hidden, listShown, views, type Acts, type Pane, type Shown } from './views/frame'
 import { helpView } from './views/help'
 import { issueView } from './views/issue'
 import { issuesView } from './views/issues'
@@ -46,6 +46,7 @@ const milestonesUnfolded = atom({ plugin: 'whats-next', key: 'milestonesUnfolded
 const milestoneError = atom({ plugin: 'whats-next', key: 'milestoneError' } as const, null)
 const msIssues = atom({ plugin: 'whats-next', key: 'milestoneIssues' } as const, {})
 const closedMilestones = atom({ plugin: 'whats-next', key: 'closedMilestones' } as const, [])
+const closedShown = atom({ plugin: 'whats-next', key: 'closedShown' } as const, false)
 const panesOpen = atom({ plugin: 'whats-next', key: 'panesOpen' } as const, [])
 const filterChosen = atom({ plugin: 'whats-next', key: 'filterChosen' } as const, null)
 const filterShown = atom({ plugin: 'whats-next', key: 'filterShown' } as const, null)
@@ -54,21 +55,37 @@ const labelFilter = atom({ plugin: 'whats-next', key: 'labelFilter' } as const, 
 const repoLabels = atom({ plugin: 'whats-next', key: 'repoLabels' } as const, { kind: 'idle' })
 const childrenToo = atom({ plugin: 'whats-next', key: 'childrenToo' } as const, true)
 const requests = atom({ plugin: 'whats-next', key: 'requests' } as const, null)
+// Per pane, keyed by its id: where it is (hooks/where.ts).
+const where = atom({ plugin: 'whats-next', key: 'where' } as const, HERE)
+
+// Where pane `pane` is, and the pane moved by one of where.ts's steps.
+function placeOf($: EngineInterface, pane: string): Promise<Where> {
+  return read($, memberOf(where, { requestId: pane }))
+}
+function go($: EngineInterface, pane: string, change: (w: Where) => Where) {
+  return update($, memberOf(where, { requestId: pane }), change)
+}
+// The milestone the Milestones pane has open, null when it shows its list.
+async function milestoneShown($: EngineInterface) {
+  return milestoneOf(await placeOf($, MILESTONES_PANE))
+}
 
 // Every request What's Next sends the forge, counted, so Debug can say what each action cost.
 let requestsMade = 0
-const send =
-  ($: EngineInterface): Send =>
-  (url, init) => {
+function send($: EngineInterface): Send {
+  return (url, init) => {
     requestsMade++
     return $.http.fetch(url, init)
   }
+}
 
 // The forge each host runs, as setup's check found it.
 const forges = new Map<string, Forge>()
 
 // The tracker behind repo `r`, as setup's check found its forge.
-const tracker = ($: EngineInterface, r: Repo): Tracker => trackerFor(send($), r, forges.get(r.host), configTokens, configLabel)
+function tracker($: EngineInterface, r: Repo): Tracker {
+  return trackerFor(send($), r, forges.get(r.host), configTokens, configLabel)
+}
 
 // Runs an action and records how many requests it sent, under `label`.
 async function counted<T>($: EngineInterface, label: string, action: () => Promise<T>): Promise<T> {
@@ -282,7 +299,9 @@ async function showFilter($: EngineInterface) {
 }
 
 // What the milestone filter is set to, All until it is loaded.
-const filterSet = async ($: EngineInterface): Promise<MilestoneFilter> => (await read($, filterShown))?.set ?? ALL
+async function filterSet($: EngineInterface): Promise<MilestoneFilter> {
+  return (await read($, filterShown))?.set ?? ALL
+}
 
 // What's next within the milestone filter. `before`: what was known before
 // a load; without it (the milestone filter switching) nothing left the lists.
@@ -410,7 +429,9 @@ async function showHelp($: EngineInterface, pane: string) {
   await update($, filterOpen, () => false)
 }
 
-const leaveHelp = ($: EngineInterface, pane: string) => go($, pane, step.leaveHelp)
+function leaveHelp($: EngineInterface, pane: string) {
+  return go($, pane, step.leaveHelp)
+}
 
 // Opens issue `n` in pane `pane`, reached from the one shown through its
 // Blocked by or Blocks: Back returns to that one.
@@ -786,7 +807,9 @@ async function setParent($: EngineInterface, pane: string, i: IssueDetail, p: nu
 }
 
 // Children too ticked if not, unticked if so.
-const toggleChildrenToo = ($: EngineInterface) => update($, childrenToo, on => !on)
+function toggleChildrenToo($: EngineInterface) {
+  return update($, childrenToo, on => !on)
+}
 
 // What a draft is made from: the issue, and its comments when known.
 type DraftSource = Pick<IssueRow, 'number' | 'title' | 'url' | 'body'> & {
@@ -947,6 +970,37 @@ function builtManifest($: EngineInterface): Promise<Built> {
   return ownManifest
 }
 
+// The session's state a view draws, for pane `e`, read once per render: the
+// views take no engine (hooks/views/frame.tsx).
+async function shownState($: EngineInterface, e: RenderInput<'Pane'>): Promise<Shown> {
+  return {
+    repo: await read($, repo),
+    version: await read($, version),
+    token: await read($, token),
+    setup: await read($, setup),
+    overview: await read($, overview),
+    spinner: await read($, spinner),
+    issues: await read($, issues),
+    panesOpen: await read($, panesOpen),
+    filterOpen: await read($, filterOpen),
+    repoLabels: await read($, repoLabels),
+    childrenToo: await read($, childrenToo),
+    unfolded: await read($, unfolded),
+    treeKids: await read($, treeKids),
+    issuesFolded: await read($, issuesFolded),
+    descriptionUnfolded: await read($, descriptionUnfolded),
+    milestones: await read($, milestones),
+    milestonesUnfolded: await read($, milestonesUnfolded),
+    milestoneIssues: await read($, msIssues),
+    closedMilestones: await read($, closedMilestones),
+    closedShown: await read($, closedShown),
+    milestoneError: await read($, milestoneError),
+    detail: await read($, memberOf(detail, e)),
+    parentChoices: await read($, memberOf(parentChoices, e)),
+    milestoneShown: await milestoneShown($),
+  }
+}
+
 // Every pane draws here: it reads the look once, then picks the view that
 // draws what the pane shows (hooks/views).
 async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
@@ -999,6 +1053,11 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
     counted: (label, action) => counted($, label, action),
     chooseIcons: value => chooseSetting($, { field: 'icons', value }),
     chooseCompact: value => chooseSetting($, { field: 'compact', value }),
+    go: change => go($, id, change),
+    setFilterOpen: change => update($, filterOpen, change),
+    foldIssues: () => update($, issuesFolded, x => !x),
+    setDescription: change => update($, descriptionUnfolded, change),
+    toggleClosed: () => update($, closedShown, o => !o),
   }
   const p: Pane = {
     e,
@@ -1009,6 +1068,7 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
     look,
     draw: draw(look),
     known,
+    shown: await shownState($, e),
     // The tracker behind the repo, for its name and where it makes tokens.
     tracker: r ? tracker($, r) : null,
     acts,
@@ -1017,16 +1077,16 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
     requests: configDebug ? await read($, requests) : null,
     repoName: r ? slug(r) : '',
   }
-  const f = await frame($, p)
+  const f = await frame(p)
   const open = issueOf(p.place)
   if (p.place.help) return helpView(p, f)
-  if (s.kind === 'ready' && r && icons === 'ask') return iconsChoice($, p, f)
-  if (s.kind === 'ready' && r && compact === 'ask') return compactChoice($, p, f)
-  if (s.kind === 'ready' && r && open !== null) return issueView($, p, f, r, open)
-  if (id === MILESTONES_PANE && s.kind === 'ready' && r) return milestonesView($, p, f, s, r)
-  if (id === ISSUES_PANE && s.kind === 'ready' && r) return issuesView($, p, f, r)
+  if (s.kind === 'ready' && r && icons === 'ask') return iconsChoice(p, f)
+  if (s.kind === 'ready' && r && compact === 'ask') return compactChoice(p, f)
+  if (s.kind === 'ready' && r && open !== null) return issueView(p, f, r, open)
+  if (id === MILESTONES_PANE && s.kind === 'ready' && r) return milestonesView(p, f, s, r)
+  if (id === ISSUES_PANE && s.kind === 'ready' && r) return issuesView(p, f, r)
   if (s.kind === 'ready' && r && m.kind !== 'idle' && m.kind !== 'error') return nextView(p, f, m, r)
-  return setupView($, p, f, configure)
+  return setupView(p, f, configure)
 }
 
 // /next opens the panes with What's next in front; /next help opens What's

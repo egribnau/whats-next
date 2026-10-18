@@ -1,44 +1,32 @@
-import { atom, read, update } from 'claude-code'
-import type { EngineInterface, RenderChildren } from 'claude-code'
+import type { RenderChildren } from 'claude-code'
 
 import type { Epic, Milestone, MilestoneIssue, Repo, Setup } from '../../types'
 import { CLOSED_END, COUNT, fit, FOLD_AT, whoOf, type Part } from '../draw'
 import { dueFirst, forYou, inMilestone, markOf, openChildren, standing, tally, tree } from '../epics'
 import { wrap } from '../issue'
 import { slug } from '../tracker'
-import { milestoneShown, MILESTONES_PANE } from '../panes'
+import { MILESTONES_PANE } from '../panes'
 import { treeKnown, type Action, type Frame, type Pane } from './frame'
-
-// The state this view reads and writes (the contract in types/index.d.ts).
-const milestones = atom({ plugin: 'whats-next', key: 'milestones' } as const, null)
-const milestonesUnfolded = atom({ plugin: 'whats-next', key: 'milestonesUnfolded' } as const, [])
-const msIssues = atom({ plugin: 'whats-next', key: 'milestoneIssues' } as const, {})
-const closedMilestones = atom({ plugin: 'whats-next', key: 'closedMilestones' } as const, [])
-const closedShown = atom({ plugin: 'whats-next', key: 'closedShown' } as const, false)
-const unfolded = atom({ plugin: 'whats-next', key: 'unfolded' } as const, [])
-const milestoneError = atom({ plugin: 'whats-next', key: 'milestoneError' } as const, null)
-const issuesFolded = atom({ plugin: 'whats-next', key: 'issuesFolded' } as const, false)
-const descriptionUnfolded = atom({ plugin: 'whats-next', key: 'descriptionUnfolded' } as const, false)
 
 // The Milestones pane, once setup passes (`s`, for repo `r`): each open
 // milestone folded, due first, with how far it is from its own counts;
 // then the last closed. A milestone open shows its detail instead.
-export async function milestonesView($: EngineInterface, p: Pane, f: Frame, s: Extract<Setup, { kind: 'ready' }>, r: Repo) {
+export async function milestonesView(p: Pane, f: Frame, s: Extract<Setup, { kind: 'ready' }>, r: Repo) {
   const { draw: d, acts, known } = p
   const { Box, Text } = p.look.ui
   const { columns } = p.look
   const gap = d.gap
   const now = p.look.today
-  const openOnes = await read($, milestones)
-  const folds = new Set(await read($, milestonesUnfolded))
+  const openOnes = p.shown.milestones
+  const folds = new Set(p.shown.milestonesUnfolded)
   const rows: RenderChildren[] = []
   if (openOnes === null) rows.push(d.line('loading', 'Loading the milestones…', { dimColor: true }))
   if (openOnes !== null && openOnes.length === 0) rows.push(d.para('none', `No open milestones in ${slug(r)}.`, { dimColor: true }))
-  const issuesOf = await read($, msIssues)
-  const closedOnes = await read($, closedMilestones)
-  const showClosed = await read($, closedShown)
-  const epicFolds = new Set(await read($, unfolded))
-  const { kidsOf, openEpics } = await treeKnown($, p)
+  const issuesOf = p.shown.milestoneIssues
+  const closedOnes = p.shown.closedMilestones
+  const showClosed = p.shown.closedShown
+  const epicFolds = new Set(p.shown.unfolded)
+  const { kidsOf, openEpics } = treeKnown(p)
   const openIssue = (n: number) => acts.openIssue(MILESTONES_PANE, n)
   // A milestone's issues as a tree, in its row folded open or in its
   // detail: its epics at the top of the tree, each with its fold mark, bar
@@ -127,7 +115,7 @@ export async function milestonesView($: EngineInterface, p: Pane, f: Frame, s: E
 
   // A milestone open: its detail in place of the list. One no longer
   // listed after a Refresh shows the list.
-  const inDetail = await milestoneShown($)
+  const inDetail = p.shown.milestoneShown
   const shownMs = inDetail === null ? undefined : [...(openOnes ?? []), ...closedOnes].find(m => m.title === inDetail)
   if (shownMs) {
     const isClosed = !(openOnes ?? []).includes(shownMs)
@@ -151,7 +139,7 @@ export async function milestonesView($: EngineInterface, p: Pane, f: Frame, s: E
     // Description, folded, shows its first three lines.
     const text = (shownMs.description ?? '').trim()
     const descLines = text === '' ? [] : wrap(text, columns)
-    const descOpen = await read($, descriptionUnfolded)
+    const descOpen = p.shown.descriptionUnfolded
     const descShown = descOpen || descLines.length <= FOLD_AT ? descLines.length : 3
     // The title, when it closed under it, then its due date as a fact
     // under Due, in the issue detail's gutter (DRAWING-issue.md, The issue
@@ -204,19 +192,19 @@ export async function milestonesView($: EngineInterface, p: Pane, f: Frame, s: E
       f.refreshAction,
       f.helpAction,
     ]
-    const error = await read($, milestoneError)
+    const error = p.shown.milestoneError
     if (error) {
       body.push(<Box key="gap-error" height={1} flexShrink={0} />, ...wrap(error, columns).map((tl, k) => d.line(`action-error-${k}`, tl, { color: 'error' })))
     }
     // Two sections, each folding on its rule as Closed does: Issues, the
     // milestone's issues as a tree, unfolded at first; then Description.
-    const issuesShut = await read($, issuesFolded)
+    const issuesShut = p.shown.issuesFolded
     body.push(
       <Box key="gap-issues" height={1} flexShrink={0} />,
       d.rule('issues-section-rule', 'Issues', [{ text: `${shownMs.total - shownMs.closed} open` }], {
         key: 'issues-section',
         open: !issuesShut,
-        onPress: () => update($, issuesFolded, x => !x),
+        onPress: acts.foldIssues,
       }),
     )
     if (!issuesShut) {
@@ -239,13 +227,13 @@ export async function milestonesView($: EngineInterface, p: Pane, f: Frame, s: E
     body.push(
       ...(endsInRow ? d.sectionEnd('desc') : [<Box key="gap-desc" height={1} flexShrink={0} />]),
       descLines.length > FOLD_AT
-        ? d.rule('description-section-rule', 'Description', [], { key: 'description-section', open: descOpen, onPress: () => update($, descriptionUnfolded, o => !o) })
+        ? d.rule('description-section-rule', 'Description', [], { key: 'description-section', open: descOpen, onPress: () => acts.setDescription(o => !o) })
         : d.rule('desc', 'Description'),
     )
     if (descLines.length === 0) body.push(d.line('no-desc', 'No description.', { dimColor: true }))
     descLines.slice(0, descShown).forEach((tl, k) => body.push(d.line(`d-${k}`, tl || ' ')))
     if (descShown < descLines.length) {
-      body.push(d.moreLine('description-more', descLines.length - descShown, () => update($, descriptionUnfolded, () => true)))
+      body.push(d.moreLine('description-more', descLines.length - descShown, () => acts.setDescription(() => true)))
     }
     return f.detailFrame(f.detailTop(actions, () => acts.openMilestone(null)), body, f.menuLines(actions))
   }
@@ -330,7 +318,7 @@ export async function milestonesView($: EngineInterface, p: Pane, f: Frame, s: E
         {d.rule('closed-rule-line', 'Closed', [{ text: `${closedOnes.length}` }], {
           key: 'closed-section',
           open: showClosed,
-          onPress: () => update($, closedShown, o => !o),
+          onPress: acts.toggleClosed,
         })}
       </Box>,
     )

@@ -1,7 +1,6 @@
-import { atom, read, update } from 'claude-code'
-import type { EngineInterface, RenderChildren, RenderInput } from 'claude-code'
+import type { PluginState, RenderChildren, RenderInput } from 'claude-code'
 
-import type { IssueDetail, Label, LabelFilter, Milestone, MilestoneFilter, Where } from '../../types'
+import type { Detail, IssueDetail, Label, LabelFilter, Milestone, MilestoneFilter, ParentChoices, Where } from '../../types'
 import type { Draw, Look, Requests } from '../draw'
 import { fit } from '../draw'
 import { filterKey, isAll, labelWords, leftOut, NO_LABEL, sameFilter, stepLabel, withMode } from '../filter'
@@ -10,13 +9,6 @@ import type { Known } from '../load'
 import { measure } from '../measure'
 import type { Tracker } from '../tracker'
 import * as step from '../where'
-import { go } from '../panes'
-
-// The state the frame reads and writes (the contract in types/index.d.ts).
-const panesOpen = atom({ plugin: 'whats-next', key: 'panesOpen' } as const, [])
-const filterOpen = atom({ plugin: 'whats-next', key: 'filterOpen' } as const, false)
-const treeKids = atom({ plugin: 'whats-next', key: 'treeKids' } as const, {})
-const repoLabels = atom({ plugin: 'whats-next', key: 'repoLabels' } as const, { kind: 'idle' })
 
 // What every view of a pane shares: what it is given to draw with, and the
 // frame around its rows (the top row, the menu, the milestone filter's
@@ -66,11 +58,52 @@ export type Acts = {
   counted: <T>(label: string, action: () => Promise<T>) => Promise<T>
   chooseIcons: (value: 'icons' | 'text') => unknown
   chooseCompact: (value: 'on' | 'off') => unknown
+  // The pane moved by one of where.ts's steps.
+  go: (change: (w: Where) => Where) => Promise<unknown>
+  // The milestone filter's list opened or shut.
+  setFilterOpen: (change: (open: boolean) => boolean) => Promise<unknown>
+  // In the milestone detail: Issues folded, Description unfolded, or the
+  // closed milestones shown in the list.
+  foldIssues: () => unknown
+  setDescription: (change: (open: boolean) => boolean) => unknown
+  toggleClosed: () => unknown
 }
 
-// What a view is given, beside the engine: the pane it draws and where that pane
-// is, the look and the drawing made from it, what is known of the repo, the
-// tracker behind it, and what a press does. `version` and `repository` are
+// The session's state, as types/index.d.ts has it.
+type State = PluginState['whats-next']
+
+// What the views draw from the session's state, read once per render by
+// hooks/register.tsx: the views take no engine. `detail` and
+// `parentChoices` are this pane's; `milestoneShown` the milestone the
+// Milestones pane has open, null when it shows its list.
+export type Shown = Pick<
+  State,
+  | 'repo'
+  | 'version'
+  | 'token'
+  | 'setup'
+  | 'overview'
+  | 'spinner'
+  | 'issues'
+  | 'panesOpen'
+  | 'filterOpen'
+  | 'repoLabels'
+  | 'childrenToo'
+  | 'unfolded'
+  | 'treeKids'
+  | 'issuesFolded'
+  | 'descriptionUnfolded'
+  | 'milestones'
+  | 'milestonesUnfolded'
+  | 'milestoneIssues'
+  | 'closedMilestones'
+  | 'closedShown'
+  | 'milestoneError'
+> & { detail: Detail; parentChoices: ParentChoices; milestoneShown: string | null }
+
+// What a view is given: the pane it draws and where that pane is, the look
+// and the drawing made from it, what is known of the repo, the session's
+// state it draws, the tracker behind it, and what a press does. `version` and `repository` are
 // What's Next's own, for the bottom line; `requests` the Debug line's.
 export type Pane = {
   e: RenderInput<'Pane'>
@@ -80,6 +113,7 @@ export type Pane = {
   look: Look
   draw: Draw
   known: Known | null
+  shown: Shown
   tracker: Tracker | null
   acts: Acts
   version: string | null
@@ -95,8 +129,8 @@ export type Action = { key: string; label: string; hotkey: string; onPress: () =
 
 // What the trees know: the children loaded of any issue (undefined while
 // not asked yet), and the repo's open epics.
-export async function treeKnown($: EngineInterface, p: Pane) {
-  const loadedKids = await read($, treeKids)
+export function treeKnown(p: Pane) {
+  const loadedKids = p.shown.treeKids
   const kidsOf = (n: number) => (n in loadedKids ? loadedKids[n] : undefined)
   const openEpics = p.known?.openEpics ?? new Set<number>()
   return { kidsOf, openEpics }
@@ -105,7 +139,7 @@ export async function treeKnown($: EngineInterface, p: Pane) {
 export type Frame = Awaited<ReturnType<typeof frame>>
 
 // The frame of pane `p`, read once per render.
-export async function frame($: EngineInterface, p: Pane) {
+export async function frame(p: Pane) {
   const { id, look, draw: d, acts } = p
   const { Box, Text, Button } = look.ui
   const { columns } = look
@@ -120,7 +154,7 @@ export async function frame($: EngineInterface, p: Pane) {
   const helpAction: Action = { key: 'help', label: 'Help', hotkey: 'h', onPress: acts.showHelp }
   const menuShown = p.place.menu
   const run = (a: Action) => async () => {
-    await go($, id, step.shutMenu)
+    await acts.go(step.shutMenu)
     await a.onPress()
   }
   // [ ☰ ] at the right of a top row; it shuts the milestone filter's list,
@@ -131,8 +165,8 @@ export async function frame($: EngineInterface, p: Pane) {
       key="menu"
       label="☰"
       onPress={async () => {
-        await update($, filterOpen, () => false)
-        await go($, id, w => (w.labels ? step.toggleLabels(w) : w.milestones ? step.toggleMilestones(w) : w.parents ? step.toggleParents(w) : step.toggleMenu(w)))
+        await acts.setFilterOpen(() => false)
+        await acts.go(w => (w.labels ? step.toggleLabels(w) : w.milestones ? step.toggleMilestones(w) : w.parents ? step.toggleParents(w) : step.toggleMenu(w)))
       }}
     />
   )
@@ -226,11 +260,11 @@ export async function frame($: EngineInterface, p: Pane) {
   }
   // With another What's Next pane open the engine draws tabs that name both, so a
   // title row leaves its pane's name out.
-  const tabbed = (await read($, panesOpen)).some(other => other !== id)
+  const tabbed = p.shown.panesOpen.some(other => other !== id)
   // The label filter both list panes share, and the colour of each label
   // the repo has, once its labels were read.
   const labelsSet = look.labels
-  const known = await read($, repoLabels)
+  const known = p.shown.repoLabels
   const colorOf = (name: string) => (known.kind === 'ok' ? (known.labels.find(l => l.name === name)?.color ?? '') : '')
   // The label filter's button says what it is set to, as the milestone
   // filter's does (#99, decided 5): All, No label, or the labels set, each
@@ -301,8 +335,8 @@ export async function frame($: EngineInterface, p: Pane) {
               label={`${shown.label} ▾`}
               hotkey="m"
               onPress={async () => {
-                await go($, id, w => step.shutLabels(step.shutMenu(w)))
-                await update($, filterOpen, o => !o)
+                await acts.go(w => step.shutLabels(step.shutMenu(w)))
+                await acts.setFilterOpen(o => !o)
               }}
             />
           )}
@@ -422,7 +456,7 @@ export async function frame($: EngineInterface, p: Pane) {
   const listOverlay = async (withFilter = true) => {
     const top = 1
     if (withFilter && setOption !== undefined && p.place.labels) return labelFilterList(top)
-    const listOpen = withFilter && shownFilter !== null && setOption !== undefined && (await read($, filterOpen))
+    const listOpen = withFilter && shownFilter !== null && setOption !== undefined && p.shown.filterOpen
     if (listOpen && shownFilter) {
       return overlay(
         'choices',

@@ -1,5 +1,4 @@
-import { atom, memberOf, read } from 'claude-code'
-import type { EngineInterface, RenderChildren } from 'claude-code'
+import type { RenderChildren } from 'claude-code'
 
 import type { Comment, DetailFolds, IssueDetail, Label, Milestone, ParentChoices, Ref, Repo, RepoLabels } from '../../types'
 import { age, CLOSED_MARK, fit, FOLD_AT, ICON, whoOf } from '../draw'
@@ -8,33 +7,24 @@ import { duration, wrap } from '../issue'
 import { slug } from '../tracker'
 import * as step from '../where'
 import { foldsOf } from '../where'
-import { go } from '../panes'
 import { listShown, type Action, type Frame, type Pane } from './frame'
 
-// The state this view reads (the contract in types/index.d.ts).
-const setup = atom({ plugin: 'whats-next', key: 'setup' } as const, { kind: 'checking' })
-const detail = atom({ plugin: 'whats-next', key: 'detail' } as const, { kind: 'idle' })
-const repoLabels = atom({ plugin: 'whats-next', key: 'repoLabels' } as const, { kind: 'idle' })
-const milestones = atom({ plugin: 'whats-next', key: 'milestones' } as const, null)
-const childrenToo = atom({ plugin: 'whats-next', key: 'childrenToo' } as const, true)
-const parentChoices = atom({ plugin: 'whats-next', key: 'parentChoices' } as const, { kind: 'idle' })
-const spinner = atom({ plugin: 'whats-next', key: 'spinner' } as const, 0)
 
 // The spinner's frames, one cell each (DRAWING-issue.md, The labels list).
 const SPIN = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 
 // The issue detail (DRAWING-issue.md), in place of the list: issue `open`
 // of repo `r`, as read from the forge.
-export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, open: number) {
+export async function issueView(p: Pane, f: Frame, r: Repo, open: number) {
   const { id, draw: d, acts, known } = p
   const { Box, Text, Button } = p.look.ui
   const { columns } = p.look
   const t = p.tracker
-  const s = await read($, setup)
-  const dt = await read($, memberOf(detail, p.e))
+  const s = p.shown.setup
+  const dt = p.shown.detail
   const now = p.look.today
   const folds = foldsOf(p.place)
-  const setFolds = (change: (x: DetailFolds) => DetailFolds) => () => go($, id, w => step.fold(w, change))
+  const setFolds = (change: (x: DetailFolds) => DetailFolds) => () => acts.go(w => step.fold(w, change))
   const body: RenderChildren[] = []
   const gapRow = (key: string) => <Box key={key} height={1} flexShrink={0} />
   // Lines of text that may run long, each cut to the pane: a detail counts its rows.
@@ -53,7 +43,7 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
   const word = t?.nested ? 'Parent' : 'Epic'
   // A list waiting on the forge, and its spinner's frame (DRAWING-issue.md, The labels list).
   const waiting = dt.kind === 'ok' ? dt.busy : undefined
-  const frame = SPIN[(await read($, spinner)) % SPIN.length] ?? ' '
+  const frame = SPIN[p.shown.spinner % SPIN.length] ?? ' '
   listShown.delete(id)
   if (dt.kind === 'ok') {
     const i = dt.issue
@@ -334,14 +324,14 @@ export async function issueView($: EngineInterface, p: Pane, f: Frame, r: Repo, 
         : allowed.kind === 'read-only' && allowed.reason === 'push'
           ? `Assign, close, labels, milestone and epic need push rights on ${slug(r)}.`
           : `Assign, close, labels, milestone and epic need a token with ${t?.writeScope ?? 'write:issue'}: the setup guide's steps make one.`
-    if (canAct && p.place.labels) shownLabels = { issue: i, known: await read($, repoLabels), scroll: p.place.labels.scroll }
+    if (canAct && p.place.labels) shownLabels = { issue: i, known: p.shown.repoLabels, scroll: p.place.labels.scroll }
     // The open children in its milestone, which Children too moves with it.
     const kids = children.filter(x => x.state === 'open' && (x.milestone ?? null) === (i.milestone?.title ?? null)).map(x => x.number)
     if (canAct && p.place.milestones) {
-      shownMilestones = { issue: i, open: await read($, milestones), scroll: p.place.milestones.scroll, kids, too: await read($, childrenToo) }
+      shownMilestones = { issue: i, open: p.shown.milestones, scroll: p.place.milestones.scroll, kids, too: p.shown.childrenToo }
     }
     if (canParent && p.place.parents) {
-      shownParents = { issue: i, choices: await read($, memberOf(parentChoices, p.e)), scroll: p.place.parents.scroll, under: parents }
+      shownParents = { issue: i, choices: p.shown.parentChoices, scroll: p.place.parents.scroll, under: parents }
     }
     prompt = <Button key="prompt" label={d.say(ICON.work, 'Prompt')} hotkey="p" onPress={() => acts.workOn(i)} />
 

@@ -1,5 +1,4 @@
-import { atom, read } from 'claude-code'
-import type { EngineInterface, RenderChildren } from 'claude-code'
+import type { RenderChildren } from 'claude-code'
 
 import type { Child, Epic, Repo } from '../../types'
 import { whoOf, type Part } from '../draw'
@@ -9,24 +8,20 @@ import { slug } from '../tracker'
 import { ISSUES_PANE } from '../panes'
 import { treeKnown, type Frame, type Pane } from './frame'
 
-// The state this view reads (the contract in types/index.d.ts).
-const issues = atom({ plugin: 'whats-next', key: 'issues' } as const, { kind: 'idle' })
-const unfolded = atom({ plugin: 'whats-next', key: 'unfolded' } as const, [])
-
 // The Issues pane, once setup passes, for repo `r`: the open issues within
 // the milestone filter and the label filter, by milestone, as a milestone
 // folded open in Milestones draws them (#99, decided 1): the open epics,
 // each folding open to its tree, then the issues no open epic holds, then
 // the closed epics.
-export async function issuesView($: EngineInterface, p: Pane, f: Frame, r: Repo) {
+export async function issuesView(p: Pane, f: Frame, r: Repo) {
   const { draw: d, acts } = p
   const { Box } = p.look.ui
   const gap = d.gap
   const now = p.look.today
-  const shown = await read($, issues)
-  const folds = new Set(await read($, unfolded))
+  const shown = p.shown.issues
+  const folds = new Set(p.shown.unfolded)
   const set = p.look.labels
-  const { kidsOf, openEpics } = await treeKnown($, p)
+  const { kidsOf, openEpics } = treeKnown(p)
   const openIssue = (n: number) => acts.openIssue(ISSUES_PANE, n)
   const match = (labels: readonly { name: string }[]) => matches(set, labels)
   const out = (labels: readonly { name: string }[]) => leavesOut(set, labels)

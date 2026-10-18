@@ -76,6 +76,12 @@ install all of it.
 - `claude plugin validate` scans each `update` and `read` for the atom it
   names: a literal, or a const of the same file. An atom passed in as a
   parameter fails validation, and with it every test (#94).
+- The plugin directory reads `$` in a file that declares a hook in two
+  forms only: a plain call, `$.noun.method(...)`, and `$` alone as an
+  argument to a `function` declared at the top level of that same file
+  (`read` and `update` from `claude-code` too). No arrow const, no
+  function of another file: so the views take no `$`, `register.tsx`
+  reads their state into `p.shown` and their writes are acts (#112).
 
 ## Hard rules
 
