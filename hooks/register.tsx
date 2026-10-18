@@ -160,13 +160,11 @@ async function check($: EngineInterface): Promise<Repo | null> {
   await update($, setup, (): Setup => ({ kind: 'checking' }))
   await update($, token, () => anyToken(configTokens))
 
-  const git = async (...args: string[]) => {
-    const run = await $.process.run(['git', ...args]).catch(() => null)
-    return run?.exitCode === 0 ? run.stdout.trim() : null
-  }
-  const url = await git('remote', 'get-url', 'origin')
+  // Each command written out, as the plugin directory reads it.
+  const out = (run: { exitCode: number; stdout: string } | null) => (run?.exitCode === 0 ? run.stdout.trim() : null)
+  const url = out(await $.process.run(['git', 'remote', 'get-url', 'origin']).catch(() => null))
   const found = await findRepo(url, async () => {
-    const inRepo = url !== null || (await git('rev-parse', '--is-inside-work-tree')) === 'true'
+    const inRepo = url !== null || out(await $.process.run(['git', 'rev-parse', '--is-inside-work-tree']).catch(() => null)) === 'true'
     const pwd = await $.process.run(['pwd']).catch(() => null)
     return { inRepo, dir: (pwd?.exitCode === 0 ? pwd.stdout.trim() : 'this folder').replace(/^\/(?:Users|home)\/[^/]+/, '~') }
   })
@@ -520,12 +518,11 @@ async function followPane($: EngineInterface, id: string, title: string, had: bo
 }
 
 // Opens `url` in the browser of the computer the session runs on: `open`
-// on macOS, `xdg-open` elsewhere.
+// on macOS, `xdg-open` elsewhere. Each command written out, as the plugin
+// directory reads it.
 async function openUrl($: EngineInterface, url: string) {
-  for (const cmd of ['open', 'xdg-open']) {
-    const run = await $.process.run([cmd, url]).catch(() => null)
-    if (run?.exitCode === 0) return
-  }
+  if ((await $.process.run(['open', url]).catch(() => null))?.exitCode === 0) return
+  if ((await $.process.run(['xdg-open', url]).catch(() => null))?.exitCode === 0) return
   $.ui.toast(`Could not open a browser for ${url}`)
 }
 
@@ -1089,6 +1086,13 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
   return setupView(p, f, configure)
 }
 
+// /next, or /whats-next where another command has /next: `e.command` is
+// the one registered.
+const nextRun: Hook<'command.run'> = async ($, e) => {
+  const word = e.args.trim()
+  return counted($, word ? `/${e.command} ${word}` : `/${e.command}`, () => runNext($, e.command, word))
+}
+
 // /next opens the panes with What's next in front; /next help opens What's
 // next on the help page. `name`: the command as registered.
 async function runNext($: EngineInterface, name: string, word: string) {
@@ -1200,22 +1204,21 @@ export const register: Register = (on, options) => {
     return done
   })
 
-  // Both names: only the one registered reaches here.
-  for (const command of [COMMAND, FALLBACK_COMMAND]) {
-    on('command.run', { command }, async ($, e) => {
-      const word = e.args.trim()
-      return counted($, word ? `/${command} ${word}` : `/${command}`, () => runNext($, command, word))
-    })
-  }
+  // Both names, each on a line of its own as the plugin directory reads
+  // them: only the one registered reaches here.
+  on('command.run', { command: COMMAND }, nextRun)
+  on('command.run', { command: FALLBACK_COMMAND }, nextRun)
 
   on('config.set', settingChanged)
   on('ui.close', { id: PANE }, paneClosed)
   on('ui.close', { id: ISSUES_PANE }, paneClosed)
   on('ui.close', { id: MILESTONES_PANE }, paneClosed)
-  for (const requestId of [PANE, ISSUES_PANE, MILESTONES_PANE]) {
-    on('ui.scroll', { requestId }, scrollDetail)
-    on('ui.focus', { requestId }, focusMoved)
-  }
+  on('ui.scroll', { requestId: PANE }, scrollDetail)
+  on('ui.scroll', { requestId: ISSUES_PANE }, scrollDetail)
+  on('ui.scroll', { requestId: MILESTONES_PANE }, scrollDetail)
+  on('ui.focus', { requestId: PANE }, focusMoved)
+  on('ui.focus', { requestId: ISSUES_PANE }, focusMoved)
+  on('ui.focus', { requestId: MILESTONES_PANE }, focusMoved)
   on('ui.render', { component: 'Pane', requestId: PANE }, renderPane)
   on('ui.render', { component: 'Pane', requestId: ISSUES_PANE }, renderPane)
   on('ui.render', { component: 'Pane', requestId: MILESTONES_PANE }, renderPane)

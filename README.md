@@ -177,8 +177,35 @@ sends nothing anywhere else: no other hosts, no usage data.
 
 A token goes only to the host it is for (see [What it needs](#what-it-needs)).
 
-On your computer it runs `git remote get-url origin` and `git rev-parse` to
-find the repo, and `pwd` to name the folder in setup. It runs `open` (or
-`xdg-open`) when you open an issue in the browser, and it reads its own
-`plugin.json` for its version. An issue goes into your prompt, and from there
-to Claude, only when you put it there.
+On your computer it runs these programs, each with the words shown and
+nothing else:
+
+- `git remote get-url origin` and `git rev-parse --is-inside-work-tree`, to
+  find the repo;
+- `pwd`, to name the folder in setup when it holds no repo;
+- `open` on macOS, else `xdg-open`, with a page's `https` address, when you
+  open an issue, a milestone or What's Next's own repo in the browser.
+
+It reads one file, its own `.claude-plugin/plugin.json`, for the version on
+its bottom line. It reads no other file and no environment variable: tokens
+come only from its settings.
+
+In Claude Code it:
+
+- reads the text in your prompt, only when you press Prompt on an issue, to
+  add the issue under what you typed or put it there alone. The issue goes to
+  Claude only when you send the prompt. It reads nothing else of the
+  conversation, and sends none of it to the forge;
+- writes one setting, Icons or Compact, in `/config`, only when you answer
+  its question about it after setup;
+- adds the command `/next` (`/whats-next` when another has `/next`), and
+  opens, draws and closes its panes.
+
+Its hooks: `session.start` adds the command and, after a reload with the
+panes open, loads again; `classic.SessionStart` loads again after `/clear`;
+`command.run` runs `/next`; `config.set` passes every setting on unchanged
+and only notes a change to Icons or Compact, so the panes follow it; the
+`ui` hooks draw the panes and follow their scrolling, focus and closing.
+
+The scripts in `docs/` (`check-tokens.sh`, `check-marketplace.sh`,
+`shoot.py`) are for working on What's Next: the mod never runs them.
