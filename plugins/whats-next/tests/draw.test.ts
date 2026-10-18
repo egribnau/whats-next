@@ -114,11 +114,14 @@ test("the facts line: a milestone's due date that counts follows its name; where
   expect(words(inIt)).toBe('↦ 2 · ⧗ 20 Oct · docs · ✎ 3w')
 })
 
-test('a heading: its words dim, from the number column', () => {
+test("a heading: a rule's dashes dim in front, its words bold, none after", () => {
   const d = draw(lookOf())
   const h = d.heading('heading-43', { text: 'In epic #30' })
-  expect(words(tree(h))).toBe('  In epic #30')
-  expect((h as unknown as Node).props.dimColor).toBe(true)
+  expect(words(tree(h))).toBe('── In epic #30')
+  const [dashes, said] = elements(tree(h)).slice(1)
+  expect(dashes?.props.dimColor).toBe(true)
+  expect(said?.props.bold).toBe(true)
+  expect(words(said)).toBe('In epic #30')
 })
 
 test('with Compact on a row leaves no empty line under it', () => {

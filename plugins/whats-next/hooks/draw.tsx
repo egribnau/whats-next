@@ -221,11 +221,11 @@ export function draw(look: Look) {
   const duePart = (key: string, iso: string | null, now: number, o: DueShown): Part[] =>
     iso ? [{ text: dueWords(iso, now, o) ?? '', node: dueDate(key, iso, now, o) }] : []
   // A heading in the Queue (DRAWING.md, Headings): the scope of the rows
-  // under it, dim, starting in the number column; no line of its own.
+  // under it, a rule's `── ` dim, then its words bold; no line after it.
   const heading = (key: string, part: Part) => (
-    <Text key={key} wrap="truncate-end" dimColor>
-      {'  '}
-      {part.node ?? part.text}
+    <Text key={key} wrap="truncate-end">
+      <Text dimColor>{'── '}</Text>
+      <Text bold>{part.node ?? part.text}</Text>
     </Text>
   )
   // A line of parts `lead` columns in: one text, cut once at its end, so a

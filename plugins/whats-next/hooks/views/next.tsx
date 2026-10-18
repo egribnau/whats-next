@@ -59,10 +59,21 @@ export async function nextView(p: Pane, f: Frame, m: Exclude<Overview, { kind: '
                 },
               ]
     // A heading's words in the Queue (DRAWING.md, Headings): its scope's,
-    // the rest of the filter under its name, `In All`, `In v1.3`, `No milestone`.
+    // the rest of the filter under its name, `In All`, `In v1.3`, `No milestone`;
+    // all bold, an epic's number blue.
     const shownSet = p.look.filter?.set ?? ALL
     const headingPart = (sc: Scope | undefined): Part =>
-      sc === undefined ? { text: shownSet.kind === 'none' ? 'No milestone' : `In ${filterLabel(shownSet)}` } : (scopePart(sc, 'In')[0] as Part)
+      sc === undefined
+        ? { text: shownSet.kind === 'none' ? 'No milestone' : `In ${filterLabel(shownSet)}` }
+        : sc.kind === 'epic'
+          ? {
+              text: `In epic #${sc.number}`,
+              node: [
+                <Text key="in">In epic </Text>,
+                <Text key="epic" color="suggestion">{`#${sc.number}`}</Text>,
+              ],
+            }
+          : (scopePart(sc, 'In')[0] as Part)
     const sameScope = (a: Scope | undefined, b: Scope | undefined) =>
       a === b || (a !== undefined && b !== undefined && JSON.stringify(a) === JSON.stringify(b))
     // The mark says how a row stands for you: yours in In progress,
@@ -155,7 +166,9 @@ export async function nextView(p: Pane, f: Frame, m: Exclude<Overview, { kind: '
         m.queue.forEach((i, k) => {
           const sc = m.scopes[i.number]
           const before = k > 0 ? m.queue[k - 1] : undefined
-          if (headed && (k === 0 || !sameScope(sc, before && m.scopes[before.number]))) rows.push(d.heading(`heading-${i.number}`, headingPart(sc)))
+          // A heading gets the empty line a rule gets, but right under the rule.
+          if (headed && k === 0) rows.push(d.heading(`heading-${i.number}`, headingPart(sc)))
+          else if (headed && !sameScope(sc, before && m.scopes[before.number])) pushRule(d.heading(`heading-${i.number}`, headingPart(sc)))
           pushRow(row(i, 'queue'))
           if (i === lastDue) pushOutside()
         })

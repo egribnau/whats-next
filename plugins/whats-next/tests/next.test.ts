@@ -181,7 +181,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
       '✎ 7d',
       // One Queue rule; a heading for each scope, the rest under the filter's name.
       ...ruleTexts('Queue'),
-      '  In v1.2',
+      '── In v1.2',
+      '── ',
+      'In v1.2',
       '○ #51 Issue 51',
       '○ ',
       '#51 ',
@@ -190,7 +192,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
       'v1.2',
       ' · ',
       '✎ 6d',
-      '  In All',
+      '── In All',
+      '── ',
+      'In All',
       '○ #29 Issue 29',
       '○ ',
       '#29 ',
@@ -882,10 +886,10 @@ test('Next follows on in the epic of the issue you closed last; the Queue says e
   expect(order).toEqual([43, 44, 50, 29])
   // Under the one Queue rule, a heading per scope: the epic, then the
   // rest under the filter's name.
-  expect(all.indexOf(rule('Queue'))).toBeLessThan(all.indexOf('  In epic #30'))
-  expect(all.indexOf('  In epic #30')).toBeLessThan(all.indexOf('○ #44 Issue 44'))
-  expect(all.indexOf('  No milestone')).toBeGreaterThan(all.indexOf('○ #44 Issue 44'))
-  expect(all.indexOf('  No milestone')).toBeLessThan(all.indexOf('○ #50 Issue 50'))
+  expect(all.indexOf(rule('Queue'))).toBeLessThan(all.indexOf('── In epic #30'))
+  expect(all.indexOf('── In epic #30')).toBeLessThan(all.indexOf('○ #44 Issue 44'))
+  expect(all.indexOf('── No milestone')).toBeGreaterThan(all.indexOf('○ #44 Issue 44'))
+  expect(all.indexOf('── No milestone')).toBeLessThan(all.indexOf('○ #50 Issue 50'))
   // The epic's number blue, the words dim.
   expect(found.find(t => t.text === '#30')?.props.color).toBe('suggestion')
   expect(found.find(t => t.text === 'in epic ')?.props.dimColor).toBe(true)
@@ -969,8 +973,9 @@ test('with Compact on, rows have no empty line between them, but each section st
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   const boxes = (await ui.findAll({ type: 'Box' })) as unknown as { key: string; props: Record<string, unknown> }[]
   const ends = boxes.filter(b => (b.key ?? '').startsWith('end-'))
-  // Before Next and before the Queue: once each; a heading has none.
-  expect(ends).toHaveLength(2)
+  // Before Next, before the Queue and before its second heading: the
+  // first heading, right under the Queue rule, has none.
+  expect(ends).toHaveLength(3)
   expect(ends.every(b => b.props.height === 1)).toBe(true)
   expect(boxes.filter(b => (b.key ?? '').startsWith('issue-')).every(b => (b.props.marginBottom ?? 0) === 0)).toBe(true)
 })
@@ -1012,10 +1017,10 @@ test('due soon: /next starts on All for an issue due soon elsewhere; Next and th
   const order = all.filter(t => /^○ #\d+ Issue \d+$/.test(t)).map(t => Number(/#(\d+)/.exec(t)?.[1]))
   expect(order).toEqual([70, 29, 43, 44, 50])
   const at = (t: string) => all.indexOf(t)
-  expect(at(rule('Queue'))).toBeLessThan(at('  Due soon'))
-  expect(at('  Due soon')).toBeLessThan(at('○ #29 Issue 29'))
-  expect(at('  In epic #30')).toBeGreaterThan(at('○ #29 Issue 29'))
-  expect(at('  In All')).toBeGreaterThan(at('○ #44 Issue 44'))
+  expect(at(rule('Queue'))).toBeLessThan(at('── Due soon'))
+  expect(at('── Due soon')).toBeLessThan(at('○ #29 Issue 29'))
+  expect(at('── In epic #30')).toBeGreaterThan(at('○ #29 Issue 29'))
+  expect(at('── In All')).toBeGreaterThan(at('○ #44 Issue 44'))
   expect(all.some(t => t.includes('in All'))).toBe(false)
 })
 
