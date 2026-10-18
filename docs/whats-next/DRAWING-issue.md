@@ -98,7 +98,7 @@ blocks that show are joined by ` · `, dim, in one text cut once at its end.
 | 1 | blocked by | it stands blocked: open blockers, and not yours | `⊘ 2`: how many open issues block it, the mark and the count dim, as unblocks; which ones, the issue detail's Blocked by (#73, built 0.71.0; 0.66.0 to 0.70.2 drew the numbers, `⊘ #24, #22`) |
 | 1b | unblocks | open issues wait on it, as far as is known (GitHub's lists count them; on Forgejo and GitLab what the blocker checks found), its own epic left out as in the detail (#62, built 0.68.0, decided 3c) | `↦ 2`: the bar is this issue, the arrow what it opens; dim, a count, never the numbers (#57, built 0.67.0) |
 | 2 | due date | it has one (Forgejo and GitLab send it with the lists; GitHub issues have none), or its epic's is the due date that counts | `⧗ 14 Oct`, short form, red once passed, amber within 7 days, dim otherwise (DRAWING.md, Due dates; #45, built 0.66.0). The due date that counts (ORDERING.md, Due soon), when it is due soon and not its own, is shown with whose it is: its epic's `#30 ⧗ 19 Oct`, the number blue, in this place; its milestone's after the milestone's name (3). Its own later date is then only in the detail: one due date on a line; where the line leaves the milestone out, its own date as before (#70) |
-| 3 | milestone | it has one, and the list is not that milestone's (the milestone filter is set to it, or the row is under it) | `v0.3.0`, dim; `v0.3.0 ⧗ 20 Oct` when the milestone's due date is the one that counts and due soon (#70) |
+| 3 | milestone | it has one, and the list is not that milestone's (the milestone filter is set to it, the row is under it, or the rule or heading above it names it: `── Next · in v1.2`, `── In v1.2`, #70) | `v0.3.0`, dim; `v0.3.0 ⧗ 20 Oct` when the milestone's due date is the one that counts and due soon (#70) |
 | 4 | labels | it has any | each in its colour, commas dim |
 | 5 | age | it is known (a row made from a reference may not have it) | `✎ 3d`: the pencil (U+270E, one cell), how long ago it was opened, dim (#45, built 0.66.0) |
 
@@ -120,7 +120,7 @@ Drawn by: `issueRow`, its parts through `partsLine`; the due date by `duePart`; 
 
 | Where | Drawn as |
 |---|---|
-| What's next, every row | blocked by, unblocks, due date, milestone (not when the milestone filter is set to one), labels, age |
+| What's next, every row | blocked by, unblocks, due date, milestone (not when the milestone filter is set to one, nor where the rule or heading above names it), labels, age |
 | Epics, a child | the same |
 | Milestones, an issue under a milestone | blocked by, unblocks, due date, labels, age |
 | An epic at the top of a tree: Epics, Milestones, the milestone detail | the same as the place's issue rows, folded or unfolded: blocked by (its own children left out), unblocks, due date, milestone (Epics with the filter on All), labels, the Epic label too, age (#64, built 0.72.0) |
