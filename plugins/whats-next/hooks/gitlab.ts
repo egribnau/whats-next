@@ -345,6 +345,11 @@ export function gitlab(send: Send, r: Repo, token: string | null, known: string 
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const i = JSON.parse(res.text) as RawIssue
       remember(i)
+      // For one issue GitLab names its labels without colours: the
+      // project's labels give them.
+      const plain = labels(i)
+      const colour = plain.some(l => l.color === '') ? await colours() : null
+      const coloured = colour ? plain.map(l => ({ ...l, color: l.color || (colour.get(l.name) ?? '') })) : plain
       // Whether an open issue it names is itself blocked by an open issue
       // here, one request each; one that does not answer counts as not
       // blocked. What it blocks waits on it while it is open: no need to ask.
@@ -378,7 +383,7 @@ export function gitlab(send: Send, r: Repo, token: string | null, known: string 
         branch: null,
         logged: i.time_stats?.total_time_spent ?? null,
         estimate: i.time_stats?.time_estimate || null,
-        labels: labels(i),
+        labels: coloured,
         assignees: (i.assignees ?? []).map(a => a.username),
         blockedBy,
         blocks: blocking,

@@ -229,6 +229,8 @@ type World = {
   users?: Record<string, number>
   // What a PUT to the issue answers; 200 with the issue when left out.
   put?: Reply
+  // The project's labels.
+  labels?: Reply
 }
 
 // The answers check and the detail ask for, path by path; 404 for anything else.
@@ -245,6 +247,7 @@ function route(w: World = {}) {
       return { status: 200, body: id === undefined ? [] : [person(name, id)] }
     }
     if (p === '/api/v4/projects/boats%2Fradar') return w.project ?? { status: 200, body: proj() }
+    if (p === '/api/v4/projects/boats%2Fradar/labels') return w.labels ?? { status: 200, body: [] }
     if (issuePath) {
       const n = Number(issuePath[1])
       if (issuePath[2] === undefined) return w.issue ?? { status: 200, body: issue(n, { spent: 5400, estimate: 14400 }) }
@@ -302,6 +305,22 @@ test('issue: exactly three requests, for the issue, its notes and its merge requ
       { number: 64, title: 'Dropped idea', state: 'closed' },
     ],
   })
+})
+
+// GitLab names an issue's labels without colours when it answers for one
+// issue: their colours come from the project's labels, asked once.
+test("issue: its labels in the project's colours, without #", async () => {
+  const { r, project } = at('detail-colours.example')
+  const asked: Asked[] = []
+  const labelled = { ...issue(14), labels: ['epic', 'fase2'] }
+  const labels = { status: 200, body: [{ id: 1, name: 'epic', color: '#6699cc' }, { id: 2, name: 'fase2', color: '#e8875c' }] }
+  const t = gitlab(fakeSend(route({ issue: { status: 200, body: labelled }, labels }), asked), r, 'glpat-x', null)
+  expect((await t.issue(14, FEATURES)).labels).toEqual([
+    { name: 'epic', color: '6699cc' },
+    { name: 'fase2', color: 'e8875c' },
+  ])
+  await t.issue(14, FEATURES)
+  expect(asked.filter(a => new URL(a.url).pathname === new URL(`${project}/labels`).pathname)).toHaveLength(1)
 })
 
 test('issue: no time spent logs nothing, and a 0 estimate is null', async () => {
