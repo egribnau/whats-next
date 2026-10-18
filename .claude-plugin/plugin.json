@@ -1,6 +1,7 @@
 {
   "name": "whats-next",
-  "version": "1.1.5",
+  "displayName": "What's Next",
+  "version": "1.1.6-pre.1",
   "description": "What's next, issues and milestones from Forgejo, GitLab or GitHub, in docked panes",
   "author": {
     "name": "Erwin Gribnau"
@@ -8,6 +9,15 @@
   "license": "AGPL-3.0-only",
   "homepage": "https://github.com/egribnau/whats-next",
   "repository": "https://github.com/egribnau/whats-next",
+  "keywords": [
+    "issues",
+    "milestones",
+    "forgejo",
+    "gitlab",
+    "github",
+    "issue-tracker"
+  ],
+  "privacyPolicyUrl": "https://github.com/egribnau/whats-next#what-it-sends-where",
   "userConfig": {
     "token": {
       "type": "string",
