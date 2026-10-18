@@ -55,7 +55,7 @@ free one is blocked.
 | In progress | Your open issues. |
 | Next | The available issue to take now. |
 | Queue | The available issues after Next. |
-| heading | A line in the Queue, `── ` and bold words with no dashes after, naming the scope of the rows under it: Due soon, In epic #30, In v1.2, then the milestone filter's name for the rest (#70). Not a rule. |
+| heading | A line in the Queue, `── ` and bold words with no dashes after, naming the scope of the rows under it: Due soon, In epic #30, In v1.2, then the milestone filter's name for the rest, and Blocked over the blocked rows (#70). Not a rule. |
 | where you work | Where What's next starts from within the milestone filter: the epic (else the milestone) of your issue in progress, else of your last closed one; it widens to the parent epic, the milestone, then the rest of the filter (#57, built 0.67.0). |
 | Last closed | The issue you closed last within the milestone filter, from anywhere (the pane, the browser, a commit); What's next follows on from it (#57, built 0.67.0). |
 | Epics | The pane of epics, grouped by milestone. |

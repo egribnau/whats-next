@@ -136,11 +136,11 @@ under `── Queue`, gets none.
 - `Due soon`, `In epic #30` (the number blue), `In v1.2` (the milestone
   of the issue you work from, only with the filter on All), then the rest
   of the filter under its name: `In All`, `In v1.3`, `No milestone`
-  (ORDERING.md, Scopes)
-- headings only when the Queue holds issues of two scopes or more; with
-  one, `── Queue` and its rows, as before
-- what the limit leaves out, `and 14 more`, and the blocked rows come
-  after the last heading's rows, under none of them
+  (ORDERING.md, Scopes); last `Blocked`, over the blocked rows
+- headings only when the Queue holds two groups or more, the blocked
+  rows one of them; with one, `── Queue` and its rows, as before
+- what the limit leaves out, `and 14 more`, comes after the last scope's
+  rows, under its heading, before `Blocked`
 
 Drawn by: `heading`.
 

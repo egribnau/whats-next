@@ -81,7 +81,8 @@ out and its issues are in 4: the rules name no milestone.
 Next is the first available issue of the first scope that has one.
 The Queue goes on from there, through the same scopes, until its limit
 (QUEUE_LIMIT). Blocked issues met on the way go to the blocked rows at
-the end, as today.
+the end, under their own heading when the Queue has headings
+(DRAWING.md, Headings).
 
 An issue due soon outside the milestone filter is not taken: the filter
 holds. The available ones are counted, and the pane says how many under
