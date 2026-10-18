@@ -5,7 +5,7 @@
 Your next issue, in a docked pane beside the conversation. From Forgejo,
 GitLab or GitHub.
 
-<img src="docs/whats-next/images/whats-next.png" alt="What's next in a terminal: an issue in progress, the next issue, the Queue and the issue closed last" width="1100">
+<img src="images/whats-next.png" alt="What's next in a terminal: an issue in progress, the next issue, the Queue and the issue closed last" width="1100">
 
 - Next: the first available issue: due soon first, then ordered by where
   you work and how many issues wait on it.
@@ -13,9 +13,8 @@ GitLab or GitHub.
 - Assign yourself, close an issue, change its labels, milestone or epic, or
   put it into your prompt, without leaving Claude Code.
 
-What's Next is a mod: a change to Claude Code's own interface. This repo,
-`claude-mods`, publishes it as the plugin marketplace `egribnau-mods`. The
-mods need an up to date version of Claude Code, in the terminal.
+What's Next is a mod: a change to Claude Code's own interface. It needs an
+up to date version of Claude Code, in the terminal.
 
 ## Install and update
 
@@ -23,14 +22,14 @@ Install, in Claude Code (answer `y` to add the marketplace, then pick a
 scope):
 
 ```
-/plugin install whats-next --marketplace egribnau/claude-mods
+/plugin install whats-next --marketplace egribnau/whats-next
 ```
 
 Update, from a shell, then run `/reload-plugins` in an open session:
 
 ```
-claude plugin marketplace update egribnau-mods
-claude plugin update whats-next@egribnau-mods
+claude plugin marketplace update egribnau
+claude plugin update whats-next@egribnau
 ```
 
 ## What's Next
@@ -67,15 +66,15 @@ directory's `origin`:
 
 | Epics | Milestones |
 | --- | --- |
-| <img src="docs/whats-next/images/epics.png" alt="Epics: an epic folded open on its children, another folded" width="482"> | <img src="docs/whats-next/images/milestones.png" alt="Milestones: one milestone folded open on its epics and issues" width="482"> |
+| <img src="images/epics.png" alt="Epics: an epic folded open on its children, another folded" width="482"> | <img src="images/milestones.png" alt="Milestones: one milestone folded open on its epics and issues" width="482"> |
 | **An issue** | **Its menu** |
-| <img src="docs/whats-next/images/issue.png" alt="An issue's detail: its epic, blockers, due date, milestone, label, branch, time and description" width="482"> | <img src="docs/whats-next/images/menu.png" alt="The menu of an issue's detail, each item with its hotkey" width="482"> |
+| <img src="images/issue.png" alt="An issue's detail: its epic, blockers, due date, milestone, label, branch, time and description" width="482"> | <img src="images/menu.png" alt="The menu of an issue's detail, each item with its hotkey" width="482"> |
 | **A milestone** | **Help** |
-| <img src="docs/whats-next/images/milestone.png" alt="A milestone's detail: due date, bar, its issues as a tree and its description" width="482"> | <img src="docs/whats-next/images/help.png" alt="The help page: the marks, fold marks, signs and counts" width="482"> |
+| <img src="images/milestone.png" alt="A milestone's detail: due date, bar, its issues as a tree and its description" width="482"> | <img src="images/help.png" alt="The help page: the marks, fold marks, signs and counts" width="482"> |
 | **Setup, stopped at the token** | |
-| <img src="docs/whats-next/images/setup.png" alt="Setup: repo and forge found, no token yet, and what to do" width="482"> | |
+| <img src="images/setup.png" alt="Setup: repo and forge found, no token yet, and what to do" width="482"> | |
 | **Compact off** | **Compact on** |
-| <img src="docs/whats-next/images/compact-off.png" alt="What's next with an empty line between rows" width="482"> | <img src="docs/whats-next/images/compact-on.png" alt="What's next without an empty line between rows" width="482"> |
+| <img src="images/compact-off.png" alt="What's next with an empty line between rows" width="482"> | <img src="images/compact-on.png" alt="What's next without an empty line between rows" width="482"> |
 
 ### What it needs
 
@@ -103,7 +102,7 @@ files of other tools.
 
 ### Settings
 
-Set the tokens with `/plugin configure whats-next@egribnau-mods`; the other
+Set the tokens with `/plugin configure whats-next@egribnau`; the other
 settings are also in `/config`, under What's Next.
 
 | Setting | Default | What it does |
@@ -121,34 +120,34 @@ Tokens are kept in secure storage. In a Code session of the Claude desktop
 app they stay empty, so the pane stops at setup's Token step: What's Next is
 for the terminal.
 
-How the panes draw and order issues is in [docs/whats-next](docs/whats-next).
+How the panes draw and order issues is in [docs](docs).
 
 ## Bugs and ideas
 
 Report a bug or ask for a feature in an issue on
-[GitHub](https://github.com/egribnau/claude-mods/issues/new/choose), with
+[GitHub](https://github.com/egribnau/whats-next/issues/new/choose), with
 the bug report or feature request template.
 
-The mods take no code from others: no pull requests, patches or code in
+What's Next takes no code from others: no pull requests, patches or code in
 issues. Code from someone else would have to be checked for anything
 malicious, and that is not done here. Pull requests are closed unread.
 
-## Working on a mod
+## Working on What's Next
 
 Add your clone as a marketplace and install from it; Claude Code then reads
 the folder itself, and `/reload-plugins` picks up an edit without a push:
 
 ```
 claude plugin marketplace add <path to your clone>
-claude plugin install whats-next@egribnau-mods
+claude plugin install whats-next@egribnau
 ```
 
-Checks and tests are listed in [docs/whats-next/CLAUDE.md](docs/whats-next/CLAUDE.md).
+Checks and tests are listed in [CLAUDE.md](CLAUDE.md).
 
 ## Licence
 
 Copyright (C) 2026 Erwin Gribnau.
 
-The mods in this repo are free software under the GNU Affero General
-Public License, version 3 only (`AGPL-3.0-only`): see [LICENSE](LICENSE).
-They come with no warranty.
+What's Next is free software under the GNU Affero General Public License,
+version 3 only (`AGPL-3.0-only`): see [LICENSE](LICENSE). It comes with no
+warranty.

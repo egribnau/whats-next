@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "egribnau-mods",
-  "description": "Personal Claude Code mods",
+  "name": "egribnau",
+  "description": "What's Next, a Claude Code mod by Erwin Gribnau",
   "owner": {
     "name": "Erwin Gribnau"
   },
@@ -9,7 +9,7 @@
     {
       "name": "whats-next",
       "description": "What's next, epics and milestones from Forgejo, GitLab or GitHub, in docked panes",
-      "source": "./plugins/whats-next",
+      "source": "./",
       "category": "productivity"
     }
   ]
