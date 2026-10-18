@@ -17,9 +17,12 @@ Use:
     docs/.venv/bin/python docs/shoot.py whats-next
     docs/.venv/bin/python docs/shoot.py issues --pane
 
-The window is the one Terminal window of 120 columns by 40 rows, unless
---window names its id (`osascript -e 'tell application "Terminal" to get
-id of every window'`).
+The window is the one Terminal window of 120 columns, unless --window
+names its id (`osascript -e 'tell application "Terminal" to get id of every
+window'`). Its rows are set per shot, so the view fits with no empty rows
+under it: a pane too short for its view shrinks rows away, headings and
+descriptions first. One font size for every shot keeps the text one size
+in the README; a smaller font keeps a tall shot under 256 KiB.
 """
 
 import argparse
@@ -32,7 +35,7 @@ from pathlib import Path
 from PIL import Image
 
 IMAGES = Path(__file__).resolve().parent.parent / "images"
-COLUMNS, ROWS = 120, 40
+COLUMNS = 120
 
 
 def find_window() -> int:
@@ -41,16 +44,16 @@ def find_window() -> int:
       set out to {}
       repeat with w in windows
         set t to selected tab of w
-        set end of out to {id of w, number of columns of t, number of rows of t}
+        set end of out to {id of w, number of columns of t}
       end repeat
       return out
     end tell
     """
     raw = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, check=True).stdout
     nums = [int(n) for n in raw.replace(",", " ").split()]
-    found = [nums[i] for i in range(0, len(nums), 3) if nums[i + 1] == COLUMNS and nums[i + 2] == ROWS]
+    found = [nums[i] for i in range(0, len(nums), 2) if nums[i + 1] == COLUMNS]
     if len(found) != 1:
-        sys.exit(f"want one Terminal window of {COLUMNS}x{ROWS}, found {len(found)}: pass --window")
+        sys.exit(f"want one Terminal window of {COLUMNS} columns, found {len(found)}: pass --window")
     return found[0]
 
 
@@ -92,12 +95,17 @@ def content_top(img: Image.Image, bg: int) -> int:
 
 
 def content_right(img: Image.Image, top: int, bg: int) -> int:
-    # The scroll bar's track is not the background: the content ends at the
-    # rightmost column that is mostly background.
+    # The scroll bar's track is not the background, but its edges nearly
+    # are: from the right, pass the edge to the track, then the track, and
+    # the content ends at the first column that is mostly background.
     w, h = img.size
     ys = range(top + 20, h - 20, 8)
+    track = False
     for x in range(w - 1, w // 2, -1):
-        if sum(abs(light(img.getpixel((x, y))) - bg) <= 2 for y in ys) > 0.8 * len(ys):
+        mostly_bg = sum(abs(light(img.getpixel((x, y))) - bg) <= 2 for y in ys) > 0.8 * len(ys)
+        if not mostly_bg:
+            track = True
+        elif track or x < w - 60:
             return x + 1
     sys.exit("no right edge found")
 

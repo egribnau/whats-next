@@ -5,7 +5,7 @@
 Your next issue, in a docked pane beside the conversation. From Forgejo,
 GitLab or GitHub.
 
-<img src="images/whats-next.png" alt="What's next in a terminal: an issue in progress, the next issue, the Queue and the issue closed last" width="1100">
+<img src="images/whats-next.png" alt="What's next in a terminal: an issue in progress, the next issue due soon, the Queue under a heading per scope, and the issue closed last" width="1100">
 
 - Next: the first available issue: due soon first, then ordered by where
   you work and how many issues wait on it.
@@ -76,15 +76,17 @@ directory's `origin`:
 
 | Issues | Milestones |
 | --- | --- |
-| <img src="images/epics.png" alt="Issues: an epic folded open on its children, another folded" width="482"> | <img src="images/milestones.png" alt="Milestones: one milestone folded open on its epics and issues" width="482"> |
+| <img src="images/issues.png" alt="Issues by milestone: an epic folded open on its children, another folded" width="482"> | <img src="images/milestones.png" alt="Milestones: one milestone folded open on its epics and issues" width="482"> |
 | **An issue** | **Its menu** |
-| <img src="images/issue.png" alt="An issue's detail: its epic, blockers, due date, milestone, label, branch, time and description" width="482"> | <img src="images/menu.png" alt="The menu of an issue's detail, each item with its hotkey" width="482"> |
+| <img src="images/issue.png" alt="An issue's detail: its epic, child, milestone, label, pull request and description" width="482"> | <img src="images/menu.png" alt="The menu of an issue's detail, each item with its hotkey" width="482"> |
+| **Its labels** | **The label filter** |
+| <img src="images/labels.png" alt="The labels list in an issue's detail: each label in its colour, the issue's own checked" width="482"> | <img src="images/label-filter.png" alt="The label filter in Issues: one label set, one left out, and the issues that match behind it" width="482"> |
 | **A milestone** | **Help** |
-| <img src="images/milestone.png" alt="A milestone's detail: due date, bar, its issues as a tree and its description" width="482"> | <img src="images/help.png" alt="The help page: the marks, fold marks, signs and counts" width="482"> |
+| <img src="images/milestone.png" alt="A milestone's detail: due date, bar, its issues as a tree and its description" width="482"> | <img src="images/help.png" alt="The help page: the marks, fold marks, signs, counts, colours and buttons" width="482"> |
 | **Setup, stopped at the token** | |
 | <img src="images/setup.png" alt="Setup: repo and forge found, no token yet, and what to do" width="482"> | |
 | **Compact off** | **Compact on** |
-| <img src="images/compact-off.png" alt="What's next with an empty line between rows" width="482"> | <img src="images/compact-on.png" alt="What's next without an empty line between rows" width="482"> |
+| <img src="images/compact-off.png" alt="What's next with an empty line between rows and before each heading" width="482"> | <img src="images/compact-on.png" alt="What's next without an empty line between rows, still one before each heading" width="482"> |
 
 ### What it needs
 

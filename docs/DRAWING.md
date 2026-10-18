@@ -424,7 +424,10 @@ it, in its own colour, in a gutter as wide as the widest sign and two spaces (17
 (decided 3b): the term from TERMINOLOGY.md, then after `: ` what it
 means, `yours: assigned to you`; where TERMINOLOGY.md has no term, what
 the sign shows (decided 3c). Words too long for the pane wrap under
-themselves, the gutter left empty, never cut (decided 3d).
+themselves, the gutter left empty, never cut (decided 3d). Buttons
+keeps each line short, one line where it fits: `All ▾` stands for both
+filters, `filters`, and the lists show in place what a check means
+there (#106, 1.1.0).
 
 A new sign or colour joins the help page with the
 place that draws it. The page is a table in hooks/help.ts,

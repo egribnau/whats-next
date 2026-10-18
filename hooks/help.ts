@@ -87,12 +87,11 @@ export const HELP: readonly HelpSection[] = [
     lines: [
       { sign: text('[ ☰ ]'), words: 'menu: actions and their hotkeys' },
       { sign: text('[ ← ]'), words: 'Back: returns to where you were' },
-      { sign: text('bug or docs ▾'), words: 'label filter: the issues with every label set (and), one of them (or), without a label (No label), or All; not, the ones left out' },
-      { sign: text('All ▾'), words: 'milestone filter' },
-      { sign: text('☑ ☐'), words: 'labels list: a label the issue has, or not; label filter: a label set, or not, and with or No label; milestone list: its children move too, or not' },
-      { sign: text('☒'), words: 'label filter: a label left out, its issues not shown, under and and or alike' },
-      { sign: text('✕'), words: 'shuts the labels list, the label filter or the milestone list' },
-      { sign: text('▸'), words: 'label filter and milestone filter: sets it on All, No label or No milestone at once' },
+      { sign: text('All ▾'), words: 'filters' },
+      { sign: text('☑ ☐'), words: 'set, or not' },
+      { sign: text('☒'), words: 'left out: its issues not shown' },
+      { sign: text('✕'), words: 'shuts the list' },
+      { sign: text('▸'), words: 'sets All, No label or No milestone' },
     ],
   },
 ]
