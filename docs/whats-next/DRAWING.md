@@ -125,11 +125,13 @@ Drawn by: `rule`, for every rule.
 
 ## Headings
 
-A heading names the scope of the rows under it, inside the Queue: a dim
-line, no `──` and no line after it, its text starting in the number
-column (#70). It is not a rule: no empty line of its own before it; it
-takes the empty line a row takes (none with Compact), so a heading reads
-as part of its section.
+A heading names the scope of the rows under it, inside the Queue: the
+`── ` of a rule in front, in a rule's colour, then its words bold, from
+the mark column as a rule starts, and no dashes after it (#70; bold with
+the dashes in front since 1.1.0-pre.7, a dim line before). It is not a
+rule, but it gets the empty line a rule gets before it, with Compact
+too, so it stands apart from the rows above it; the first heading, right
+under `── Queue`, gets none.
 
 - `Due soon`, `In epic #30` (the number blue), `In v1.2` (the milestone
   of the issue you work from, only with the filter on All), then the rest
