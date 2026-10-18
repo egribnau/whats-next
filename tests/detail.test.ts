@@ -798,6 +798,22 @@ test('Open in Browser opens the issue page with open, else xdg-open', TOKEN, asy
   ])
 })
 
+for (const url of ['/System/Applications/Calculator.app', 'file:///etc/passwd', 'http://git.example.org/boats/radar/issues/29', 'https://git.example.org/x --args']) {
+  test(`Open in Browser runs nothing for an address from the forge that is not https: ${url}`, TOKEN, async ($, on) => {
+    const ran: string[] = []
+    const toasts: string[] = []
+    world(on, { ...FULL, '/issues/29': { ...ISSUE, html_url: url } }, [], ran)
+    on('ui.toast', (_$, e) => {
+      toasts.push(String(e.text))
+      return { value: undefined }
+    })
+    const ui = await opened($)
+    await ui.press({ key: 'open' })
+    expect(ran).toEqual([])
+    expect(toasts).toEqual([`Not opened: ${url} is not an https address`])
+  })
+}
+
 test('says so when no browser opens', TOKEN, async ($, on) => {
   const toasts: string[] = []
   world(on, FULL, [], [], 'none')

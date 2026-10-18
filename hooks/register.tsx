@@ -519,8 +519,13 @@ async function followPane($: EngineInterface, id: string, title: string, had: bo
 
 // Opens `url` in the browser of the computer the session runs on: `open`
 // on macOS, `xdg-open` elsewhere. Each command written out, as the plugin
-// directory reads it.
+// directory reads it. Only an https address: an issue's or a milestone's
+// comes from the forge, and `open` would start a file or an app it named.
 async function openUrl($: EngineInterface, url: string) {
+  if (!/^https:\/\/[^\s]+$/.test(url)) {
+    $.ui.toast(`Not opened: ${url} is not an https address`)
+    return
+  }
   if ((await $.process.run(['open', url]).catch(() => null))?.exitCode === 0) return
   if ((await $.process.run(['xdg-open', url]).catch(() => null))?.exitCode === 0) return
   $.ui.toast(`Could not open a browser for ${url}`)
@@ -1086,6 +1091,16 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
   return setupView(p, f, configure)
 }
 
+// A /clear starts the session's state over, What's Next's list of open
+// panes too, and fires no session.start; the panes themselves stay up. With
+// one of them up, take the list from the engine's record and load again.
+async function loadAfterClear($: EngineInterface) {
+  const ours = (await $.ui.panes().catch(() => [])).map(p => p.id).filter(id => id === PANE || id === ISSUES_PANE || id === MILESTONES_PANE)
+  if (ours.length === 0) return
+  await update($, panesOpen, () => ours)
+  await counted($, 'clear', () => refresh($))
+}
+
 // /next, or /whats-next where another command has /next: `e.command` is
 // the one registered.
 const nextRun: Hook<'command.run'> = async ($, e) => {
@@ -1190,18 +1205,11 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  // A /clear starts the session's state over, What's Next's list of open
-  // panes too, and fires no session.start; the panes themselves stay up. With
-  // one of them up, take the list from the engine's record and load again.
+  // A /clear: load again, then pass the event on unchanged, as the plugin
+  // directory reads a hook that leaves the session's first message alone.
   on('classic.SessionStart', async ($, e, next) => {
-    const done = await next(e)
-    if (e.source !== 'clear') return done
-    const ours = (await $.ui.panes().catch(() => [])).map(p => p.id).filter(id => id === PANE || id === ISSUES_PANE || id === MILESTONES_PANE)
-    if (ours.length > 0) {
-      await update($, panesOpen, () => ours)
-      await counted($, 'clear', () => refresh($))
-    }
-    return done
+    if (e.source === 'clear') await loadAfterClear($)
+    return next(e)
   })
 
   // Both names, each on a line of its own as the plugin directory reads
