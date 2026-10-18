@@ -574,12 +574,12 @@ async function writeIssue(
 }
 
 // You on issue `i`, or off it; other assignees stay.
-async function assignMe($: EngineInterface, pane: string, i: IssueDetail, on: boolean): Promise<boolean> {
+async function assignMe($: EngineInterface, pane: string, i: IssueDetail, assign: boolean): Promise<boolean> {
   const me = known?.me
   if (!me) return false
   const others = i.assignees.filter(a => a !== me)
-  const assignees = on ? [...others, me] : others
-  return writeIssue($, pane, i.number, t => t.assign(i.number, assignees), on ? 'assign' : 'unassign')
+  const assignees = assign ? [...others, me] : others
+  return writeIssue($, pane, i.number, t => t.assign(i.number, assignees), assign ? 'assign' : 'unassign')
 }
 
 // The repo's labels for the labels list, by name, read once until Refresh.
@@ -643,7 +643,7 @@ async function wait($: EngineInterface, pane: string, list: 'labels' | 'mileston
 // Label `l` added to issue `i`, or taken off; the tick moves at once, and
 // the pane stays on the issue, its labels list open for the next, waiting
 // until the forge answers (DRAWING-issue.md, The labels list).
-async function setLabel($: EngineInterface, pane: string, i: IssueDetail, l: Label, on: boolean) {
+async function setLabel($: EngineInterface, pane: string, i: IssueDetail, l: Label, add: boolean) {
   const free = await wait($, pane, 'labels')
   if (!free) return false
   try {
@@ -654,15 +654,15 @@ async function setLabel($: EngineInterface, pane: string, i: IssueDetail, l: Lab
         const others = d.issue.labels.filter(x => x.name !== l.name)
         return { ...d, issue: { ...d.issue, labels: has ? [...others, { name: l.name, color: l.color }] : others } }
       })
-    await tick(on)
+    await tick(add)
     const change = async (t: Tracker) => {
-      const why = await t.label(i.number, l, on)
+      const why = await t.label(i.number, l, add)
       await free()
       return why
     }
-    const done = await writeIssue($, pane, i.number, change, on ? `add ${l.name} to` : `take ${l.name} off`, true)
+    const done = await writeIssue($, pane, i.number, change, add ? `add ${l.name} to` : `take ${l.name} off`, true)
     // Refused: the tick as it was, the refusal kept.
-    if (!done) await tick(!on)
+    if (!done) await tick(!add)
     return done
   } finally {
     await free()
@@ -756,8 +756,8 @@ async function toggleParents($: EngineInterface, pane: string, i: IssueDetail, c
 // stays on the issue, its epic list open for the next (DRAWING-issue.md, The
 // epic list). What the forge took is remembered over its lists for a while,
 // as GitHub's answer the old parent for some seconds.
-async function setParent($: EngineInterface, pane: string, i: IssueDetail, p: number | null, on: boolean, parents: number[]) {
-  const put = p !== null && on
+async function setParent($: EngineInterface, pane: string, i: IssueDetail, p: number | null, chosen: boolean, parents: number[]) {
+  const put = p !== null && chosen
   const free = await wait($, pane, 'parents')
   if (!free) return false
   try {
@@ -805,7 +805,7 @@ async function setParent($: EngineInterface, pane: string, i: IssueDetail, p: nu
 
 // Children too ticked if not, unticked if so.
 function toggleChildrenToo($: EngineInterface) {
-  return update($, childrenToo, on => !on)
+  return update($, childrenToo, too => !too)
 }
 
 // What a draft is made from: the issue, and its comments when known.
@@ -1036,15 +1036,15 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
     foldMilestone: title => foldMilestone($, title),
     openMilestone: title => openMilestone($, title),
     closeMilestone: (ms, closed) => closeMilestone($, ms, closed),
-    assignMe: (i, on) => assignMe($, id, i, on),
+    assignMe: (i, assign) => assignMe($, id, i, assign),
     writeIssue: (n, change, what) => writeIssue($, id, n, change, what),
     toggleLabels: () => toggleLabels($, id),
-    setLabel: (i, l, on) => setLabel($, id, i, l, on),
+    setLabel: (i, l, add) => setLabel($, id, i, l, add),
     toggleMilestones: () => toggleMilestones($, id),
     setMilestone: (i, m, children) => setMilestone($, id, i, m, children),
     toggleChildrenToo: () => toggleChildrenToo($),
     toggleParents: (i, children) => toggleParents($, id, i, children),
-    setParent: (i, p, on, parents) => setParent($, id, i, p, on, parents),
+    setParent: (i, p, chosen, parents) => setParent($, id, i, p, chosen, parents),
     workOn: i => workOn($, i, { pane: id, issue: i }),
     openUrl: url => openUrl($, url),
     counted: (label, action) => counted($, label, action),

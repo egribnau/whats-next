@@ -82,6 +82,8 @@ install all of it.
   (`read` and `update` from `claude-code` too). No arrow const, no
   function of another file: so the views take no `$`, `register.tsx`
   reads their state into `p.shown` and their writes are acts (#112).
+  It reads `on` the same way: each registration a statement of its own,
+  and no other name `on` in that file, not even a parameter.
 
 ## Hard rules
 
