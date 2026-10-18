@@ -201,6 +201,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
       'docs',
       ' · ',
       '✎ 3w',
+      // The blocked rows under their own heading.
+      '── Blocked',
+      '── ',
+      'Blocked',
       '⊘ #33 Issue 33',
       '⊘ ',
       '#33 ',
@@ -283,6 +287,10 @@ test('the Queue holds 10 checked issues, a blocked one at the bottom, the rest c
   expect(free).toEqual([1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12])
   expect(all).toContain('  and 13 more')
   expect(all.indexOf('⊘  #3 Issue 3')).toBeGreaterThan(all.indexOf('  and 13 more'))
+  // One scope and the blocked rows: two groups, so a heading each, Blocked last.
+  expect(all.indexOf('── In All')).toBeLessThan(all.indexOf('○  #2 Issue 2'))
+  expect(all.indexOf('── Blocked')).toBeGreaterThan(all.indexOf('  and 13 more'))
+  expect(all.indexOf('── Blocked')).toBeLessThan(all.indexOf('⊘  #3 Issue 3'))
   // Next and the 11 issues past it are checked; #13 to #25 are not.
   const checked = asked.map(u => /\/issues\/(\d+)\/dependencies$/.exec(new URL(u).pathname)?.[1]).filter(Boolean)
   expect(checked).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'])

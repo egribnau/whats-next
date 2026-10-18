@@ -165,7 +165,8 @@ export async function nextView(p: Pane, f: Frame, m: Exclude<Overview, { kind: '
       // line under the available ones.
       if (later.length > 0) {
         pushRule(d.rule('queue', 'Queue'))
-        const headed = new Set(m.queue.map(i => JSON.stringify(m.scopes[i.number] ?? null))).size > 1
+        // The blocked rows count as one more: under their own heading, Blocked.
+        const headed = new Set(m.queue.map(i => JSON.stringify(m.scopes[i.number] ?? null))).size + (m.blocked.length > 0 ? 1 : 0) > 1
         m.queue.forEach((i, k) => {
           const sc = m.scopes[i.number]
           const before = k > 0 ? m.queue[k - 1] : undefined
@@ -182,6 +183,7 @@ export async function nextView(p: Pane, f: Frame, m: Exclude<Overview, { kind: '
             </Box>,
           )
         }
+        if (headed && m.blocked.length > 0) pushRule(d.heading('heading-blocked', { text: 'Blocked' }))
         for (const b of m.blocked) pushRow(row(b.issue, 'blocked', b.by))
       }
     }
