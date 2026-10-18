@@ -875,11 +875,11 @@ const scrollDetail: Hook<'ui.scroll'> = async ($, e, next) => {
 // scrolled into it; the last control scrolls the detail to its end, so the
 // text after it is reached too, and the first to its top.
 const focusMoved: Hook<'ui.focus'> = async ($, e, next) => {
-  const h = hidden.get(e.requestId)
-  if (e.element !== undefined && h?.keys.has(e.element)) {
-    if (lastFocus.get(e.requestId) === h.first) return {}
-    lastFocus.set(e.requestId, h.first)
-    return next({ ...e, element: h.first })
+  const hotkeys = hidden.get(e.requestId)
+  if (e.element !== undefined && hotkeys?.keys.has(e.element)) {
+    if (lastFocus.get(e.requestId) === hotkeys.first) return {}
+    lastFocus.set(e.requestId, hotkeys.first)
+    return next({ ...e, element: hotkeys.first })
   }
   lastFocus.set(e.requestId, e.element)
   // A line out of the labels list's, the milestone list's or the epic
