@@ -94,8 +94,13 @@ export function gitlab(send: Send, r: Repo, token: string | null, known: string 
   }
 
   // The people an issue names carry their ids: kept for assigning later.
-  function remember(i: Pick<RawIssue, 'author' | 'assignees'>) {
+  // Labels that come with their colour (the lists ask for them) keep it,
+  // so a label seen before needs no request for it.
+  function remember(i: Pick<RawIssue, 'author' | 'assignees' | 'labels'>) {
     for (const u of [i.author, ...(i.assignees ?? [])]) if (u?.id !== undefined) ids.set(u.username, u.id)
+    const seen = seenColours.get(project) ?? new Map<string, string>()
+    for (const l of labels(i)) if (l.color !== '') seen.set(l.name, l.color)
+    seenColours.set(project, seen)
   }
 
   // Every page of a list, 100 at a time; a page that fails names `what`.
@@ -131,6 +136,12 @@ export function gitlab(send: Send, r: Repo, token: string | null, known: string 
     return raw.filter(l => l.link_type === kind && inProject(l.web_url))
   }
 
+  // The colours of these labels by name: the ones seen with an issue
+  // before, else the project's labels, read once per project for the run.
+  async function coloursOf(names: readonly string[]): Promise<Map<string, string>> {
+    const seen = seenColours.get(project) ?? new Map<string, string>()
+    return names.every(n => seen.has(n)) ? seen : new Map([...(await colours()), ...seen])
+  }
   // The project's labels by name, with their colour as `rrggbb`, read once
   // per project for the run: links name labels without colours.
   function colours(): Promise<Map<string, string>> {
@@ -303,7 +314,7 @@ export function gitlab(send: Send, r: Repo, token: string | null, known: string 
       const raw = await links(n, 'relates_to')
       if (!raw) return null
       const kids = raw.filter(l => !isEpic(names(l)))
-      const colour = kids.some(c => names(c).length > 0) ? await colours() : new Map<string, string>()
+      const colour = await coloursOf(kids.flatMap(names))
       const deps = depsByProject.get(project) ?? false
       return Promise.all(
         kids.map(async (c): Promise<EpicChild> => {
@@ -345,11 +356,9 @@ export function gitlab(send: Send, r: Repo, token: string | null, known: string 
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const i = JSON.parse(res.text) as RawIssue
       remember(i)
-      // For one issue GitLab names its labels without colours: the
-      // project's labels give them.
-      const plain = labels(i)
-      const colour = plain.some(l => l.color === '') ? await colours() : null
-      const coloured = colour ? plain.map(l => ({ ...l, color: l.color || (colour.get(l.name) ?? '') })) : plain
+      // For one issue GitLab names its labels without colours.
+      const colour = await coloursOf(labels(i).filter(l => l.color === '').map(l => l.name))
+      const coloured = labels(i).map(l => ({ ...l, color: l.color || (colour.get(l.name) ?? '') }))
       // Whether an open issue it names is itself blocked by an open issue
       // here, one request each; one that does not answer counts as not
       // blocked. What it blocks waits on it while it is open: no need to ask.
@@ -501,7 +510,7 @@ type RawLink = {
 const names = (l: RawLink) => l.labels ?? []
 
 // Labels with their colour as `rrggbb`, GitLab's without its `#`.
-const labels = (i: RawIssue) =>
+const labels = (i: Pick<RawIssue, 'labels'>) =>
   (i.labels ?? []).map(l => (typeof l === 'string' ? { name: l, color: '' } : { name: l.name, color: (l.color ?? '').replace(/^#/, '') }))
 
 const toRow = (i: RawIssue): IssueRow => ({
@@ -541,6 +550,8 @@ const depsByProject = new Map<string, boolean>()
 
 // Each project's label colours, by its API URL, read once for the run.
 const coloursByProject = new Map<string, Promise<Map<string, string>>>()
+// Each project's label colours as the lists gave them, by its API URL.
+const seenColours = new Map<string, Map<string, string>>()
 
 // The user ids seen on each host, by username: assigning takes ids.
 const idsByHost = new Map<string, Map<string, number>>()

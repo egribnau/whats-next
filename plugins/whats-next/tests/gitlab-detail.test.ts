@@ -323,6 +323,17 @@ test("issue: its labels in the project's colours, without #", async () => {
   expect(asked.filter(a => new URL(a.url).pathname === new URL(`${project}/labels`).pathname)).toHaveLength(1)
 })
 
+test('issue: labels seen in a list before keep their colour, and the project is not asked for them', async () => {
+  const { r, project } = at('detail-seen.example')
+  const asked: Asked[] = []
+  const listed = { ...issue(14), labels: [{ id: 1, name: 'epic', color: '#6699cc' }] }
+  const send = fakeSend((u, m) => (u.pathname === new URL(`${project}/issues`).pathname ? { status: 200, body: [listed] } : route({ issue: { status: 200, body: { ...issue(14), labels: ['epic'] } } })(u, m)), asked)
+  const t = gitlab(send, r, 'glpat-x', null)
+  await t.open()
+  expect((await t.issue(14, FEATURES)).labels).toEqual([{ name: 'epic', color: '6699cc' }])
+  expect(asked.some(a => new URL(a.url).pathname.endsWith('/labels'))).toBe(false)
+})
+
 test('issue: no time spent logs nothing, and a 0 estimate is null', async () => {
   const { r } = at('detail-notime.example')
   const t = gitlab(fakeSend(route({ issue: { status: 200, body: issue(14) } })), r, 'glpat-x', null)
