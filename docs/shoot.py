@@ -15,7 +15,7 @@ Setup, once, from the repo root:
 Use:
 
     docs/.venv/bin/python docs/shoot.py whats-next
-    docs/.venv/bin/python docs/shoot.py epics --pane
+    docs/.venv/bin/python docs/shoot.py issues --pane
 
 The window is the one Terminal window of 120 columns by 40 rows, unless
 --window names its id (`osascript -e 'tell application "Terminal" to get

@@ -355,8 +355,8 @@ test('↦ leaves out the epic that waits on an issue: it is that issue’s epic'
     lastClosed: async () => null,
   } as unknown as Tracker
   const known = await loadRepo(t, { me: null, features: { time: true, deps: true, epics: true } })
-  // Epics asks what the epic waits on, What's next what its issues wait on.
-  await known.epics(ALL)
+  // Issues asks what the epic waits on, What's next what its issues wait on.
+  await known.issues(ALL)
   const next = await known.whatsNext(ALL)
   expect(next.unblocks[29]).toBe(1)
 })

@@ -9,7 +9,8 @@ GitLab or GitHub.
 
 - Next: the first available issue: due soon first, then ordered by where
   you work and how many issues wait on it.
-- Epics and milestones with their progress, folded open on their issues.
+- Every open issue by milestone, epics folded open on their children, and
+  milestones with their progress; narrowed by milestone and by label.
 - Assign yourself, close an issue, change its labels, milestone or epic, or
   put it into your prompt, without leaving Claude Code.
 
@@ -45,9 +46,16 @@ directory's `origin`:
   epic's or its milestone's. After those, Next follows on from where you
   work: the epic or milestone of your issue in progress, or of the issue
   you closed last.
-- **Epics**: the epics of a milestone, each unfolding to its children.
+- **Issues**: the open issues of a milestone, its epics first, each
+  unfolding to its children.
 - **Milestones**: every open milestone, with its epics and issues.
-- **Milestone filter**: narrows What's next and Epics to one milestone.
+- **Milestone filter** (`m`): narrows What's next and Issues to one milestone.
+- **Label filter** (`l`): narrows What's next and Issues to the issues with
+  every label ticked (and), with one of them (or), or without a label
+  (No label); with or, No label ticks along with the labels. A second press
+  on a label's box leaves it out (☒): `docs, not bug`.
+  Its button names what is set, All when nothing is. Tick `epic` for the
+  epics alone.
 - **Issue detail**: epic, children, blockers, due date, milestone, labels,
   pull requests, commits, description and comments. Assign yourself, close,
   reopen, add or take off a label, move it to another milestone (its
@@ -66,9 +74,9 @@ directory's `origin`:
 
 ### In pictures
 
-| Epics | Milestones |
+| Issues | Milestones |
 | --- | --- |
-| <img src="images/epics.png" alt="Epics: an epic folded open on its children, another folded" width="482"> | <img src="images/milestones.png" alt="Milestones: one milestone folded open on its epics and issues" width="482"> |
+| <img src="images/epics.png" alt="Issues: an epic folded open on its children, another folded" width="482"> | <img src="images/milestones.png" alt="Milestones: one milestone folded open on its epics and issues" width="482"> |
 | **An issue** | **Its menu** |
 | <img src="images/issue.png" alt="An issue's detail: its epic, blockers, due date, milestone, label, branch, time and description" width="482"> | <img src="images/menu.png" alt="The menu of an issue's detail, each item with its hotkey" width="482"> |
 | **A milestone** | **Help** |

@@ -118,7 +118,7 @@ test('Use Icons saves the setting and Prompt becomes an icon; Back, the menu and
   await ui.press({ key: 'use-icons' })
 
   expect(set).toEqual([{ key: 'whats-next@egribnau.icons', value: 'icons' }])
-  expect((await texts(ui))[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
   expect(await label(ui, 'menu')).toBe('☰')
   expect(await label(ui, 'refresh')).toBe('Refresh')
 
@@ -173,7 +173,7 @@ test('once chosen in settings, it is not asked again', { options: { token: 'secr
   await $.command.run(RUN)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
 
-  expect((await texts(ui))[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
   await ui.press({ key: 'pick-29' })
   expect(await label(ui, 'prompt')).toBe(ICON.work)
 })
@@ -219,7 +219,7 @@ for (const [button, value, gap] of [
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: button })
     expect(set).toEqual([{ key: 'whats-next@egribnau.compact', value }])
-    expect((await texts(ui))[0]).toBe("What's next")
+    await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
     const boxes = (await ui.findAll({ type: 'Box' })) as unknown as { key: string; props: Record<string, unknown> }[]
     expect(boxes.find(b => b.key === 'issue-29')?.props.marginBottom).toBe(gap)
   })

@@ -76,9 +76,13 @@ export const shutMenu = (w: Where): Where => ({ ...w, menu: false })
 
 // The issue detail's labels list opened at its top if shut, shut if open;
 // it shuts the menu, the milestone list and the epic list (DRAWING-issue.md,
-// The labels list).
+// The labels list). On a list, the label filter's list, the same way; a
+// milestone's detail has none.
 export const toggleLabels = (w: Where): Where =>
-  w.page.kind !== 'issue' ? w : { ...w, menu: false, milestones: null, parents: null, labels: w.labels ? null : { scroll: 0 } }
+  w.page.kind === 'milestone' ? w : { ...w, menu: false, milestones: null, parents: null, labels: w.labels ? null : { scroll: 0 } }
+
+// The labels list shut, as the milestone filter's list opening leaves it.
+export const shutLabels = (w: Where): Where => ({ ...w, labels: null })
 
 // The labels list scrolled to row `to`.
 export const scrollLabels = (w: Where, to: number): Where => (w.labels ? { ...w, labels: { scroll: to } } : w)

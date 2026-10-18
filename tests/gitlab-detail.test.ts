@@ -790,7 +790,7 @@ test('gitlab.com detail: Close sends state_event close, and the reloaded lists l
   // the pane goes back to What's next.
   expect(asked.filter(a => a === 'GET https://gitlab.com/api/v4/projects/boats%2Fradar/issues/14').length).toBeGreaterThan(reads)
   const all = await texts(ui)
-  expect(all[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
   expect(all.some(t => t.includes('#14'))).toBe(false)
 })
 
@@ -857,6 +857,6 @@ test('gitlab.com detail: lists that lag a change still show it at once', GL, asy
   await ui.press({ key: 'pick-14' })
   await ui.press({ key: 'close' })
   const all = await texts(ui)
-  expect(all[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
   expect(all.some(t => t.includes('#14'))).toBe(false)
 })

@@ -1,16 +1,16 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { bar, blockersCount, childOf, forYou, isMine, groupsFor, inMilestone, markOf, openChildren, roots, stands, summary, tally, tree, type TreeLine } from '../hooks/epics'
-import { ALL, filterOptions, NONE, ofMilestone } from '../hooks/filter'
+import { bar, blockersCount, childOf, forYou, isMine, groupsFor, inMilestone, leadsTo, markOf, openChildren, roots, stands, summary, tally, tree, type TreeLine } from '../hooks/epics'
+import { ALL, filterOptions, matches, NONE, ofMilestone, stepLabel, withLabel, withMode } from '../hooks/filter'
 import type { Child } from '../types'
 
-const EPICS_PANE = {
+const ISSUES_PANE = {
   plugin: 'whats-next',
   component: 'Pane',
-  requestId: 'next-epics',
+  requestId: 'next-issues',
   props: {
-    title: 'Epics',
+    title: 'Issues',
     isFocused: false,
     bodyColumns: 50,
     placement: 'dock',
@@ -50,6 +50,10 @@ const epic = (number: number, title: string, extra: Extra = {}) => issue(number,
 
 type World = {
   epics?: unknown[]
+  // The open issues the lists name, beside the epics; alice's are hers.
+  issues?: unknown[]
+  // The repo's labels, for the label filter's list.
+  labels?: { id: number; name: string; color: string }[]
   milestones?: unknown[]
   // Each issue's dependencies, as Forgejo lists them, and the issues whose
   // dependencies request fails.
@@ -97,11 +101,14 @@ function world(on: On, w: World, asked: string[] = [], opened: Opened[] = [], cl
     }
     if (url.pathname.endsWith('/version')) return reply(200, { version: '16.0.5+gitea-1.22.0' })
     if (url.pathname.endsWith('/user')) return reply(200, { login: 'alice' })
-    if (url.pathname.endsWith('/repos/issues/search')) return reply(200, [])
+    const hers = (w.issues ?? []).filter(i => (i as { assignees: { login: string }[] }).assignees.some(a => a.login === 'alice'))
+    if (url.pathname.endsWith('/repos/issues/search')) return reply(200, page === 0 ? hers : [])
     if (url.pathname.endsWith('/repos/boats/radar/issues')) {
       const wanted = url.searchParams.get('labels')
+      if (wanted === null) return reply(200, page === 0 ? (w.issues ?? []) : [])
       return reply(200, wanted === (w.label ?? 'epic') && page === 0 ? (w.epics ?? []) : [])
     }
+    if (url.pathname.endsWith('/repos/boats/radar/labels')) return reply(200, page === 0 ? (w.labels ?? []) : [])
     if (url.pathname.endsWith('/repos/boats/radar/milestones')) return reply(200, page === 0 ? (w.milestones ?? []) : [])
     if (dep && w.failDeps?.includes(Number(dep[1]))) return reply(500, { message: 'boom' })
     if (dep) return reply(200, (w.deps?.[Number(dep[1])] ?? []).map(shut))
@@ -180,21 +187,21 @@ const bottom = (version?: string) => {
   return [full, '── ', "What's Next", ...after.flatMap(x => [' · ', x]), full.slice(full.lastIndexOf(last) + last.length)]
 }
 
-test("the Epics pane opens next to What's next when the repo has an open epic", TOKEN, async ($, on) => {
+test("the Issues pane opens next to What's next when the repo has an open issue", TOKEN, async ($, on) => {
   const opened: { id: string; title?: string }[] = []
   world(on, REPO, [], opened)
   await $.command.run(RUN)
-  expect(opened).toContainEqual({ id: 'next-epics', title: 'Epics' })
+  expect(opened).toContainEqual({ id: 'next-issues', title: 'Issues' })
   expect(opened.filter(p => p.id === 'next').at(-1)?.title).toBe("What's next")
 })
 
 test('with both panes open, the tabs name them and neither title row repeats the name', TOKEN, async ($, on) => {
   world(on, REPO)
   await $.command.run(RUN)
-  const epics = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
-  expect(await texts(epics)).not.toContain('Epics')
+  const epics = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  expect(await texts(epics)).not.toContain('Issues')
   await expect(epics.find({ key: 'refresh' })).resolves.toBeDefined()
-  const next = await $.ui.mount({ ...EPICS_PANE, requestId: 'next', surface: 'terminal' })
+  const next = await $.ui.mount({ ...ISSUES_PANE, requestId: 'next', surface: 'terminal' })
   expect(await texts(next)).not.toContain("What's next")
 })
 
@@ -202,23 +209,23 @@ test('once the other panes are closed, the title row names its pane again', TOKE
   const w: World = { ...REPO }
   world(on, w)
   await $.command.run(RUN)
-  // The last epic and the milestones close, so /next closes Epics and Milestones.
+  // The last open issue and the milestones close, so /next closes Issues and Milestones.
   w.epics = [epic(3, 'Project setup', { state: 'closed' })]
   w.milestones = []
   await $.command.run(RUN)
-  const next = await $.ui.mount({ ...EPICS_PANE, requestId: 'next', surface: 'terminal' })
+  const next = await $.ui.mount({ ...ISSUES_PANE, requestId: 'next', surface: 'terminal' })
   expect((await texts(next))[0]).toBe("What's next")
 })
 
 const run = (args: string) => ({ ...RUN, args })
 
 // A pane opened new comes in front, so What's next is opened again with the
-// focus after Epics and Milestones, the only way to bring it back in front.
-test("/next opens Epics and Milestones, then brings What's next in front", TOKEN, async ($, on) => {
+// focus after Issues and Milestones, the only way to bring it back in front.
+test("/next opens Issues and Milestones, then brings What's next in front", TOKEN, async ($, on) => {
   const opened: Opened[] = []
   world(on, REPO, [], opened)
   const out = await $.command.run(run(''))
-  expect(opened.map(p => p.id)).toEqual(['next', 'next', 'next-epics', 'next-milestones', 'next'])
+  expect(opened.map(p => p.id)).toEqual(['next', 'next', 'next-issues', 'next-milestones', 'next'])
   expect(opened.at(-1)).toEqual({ id: 'next', title: "What's next", focus: true })
   expect(opened.filter(p => p.focus)).toHaveLength(1)
   expect(out).toEqual(expect.objectContaining({ text: "What's Next is ready for boats/radar: no open issues." }))
@@ -231,7 +238,7 @@ test("/next help brings What's next in front, on the help page", TOKEN, async ($
   expect(opened.at(-1)).toEqual({ id: 'next', title: "What's next", focus: true })
 })
 
-// epics (e) and next (n) went in #96: Epics is one tab away from What's next.
+// epics (e) and next (n) went in #96: Issues is one tab away from What's next.
 for (const word of ['milestones', 'epics', 'e', 'next', 'n']) {
   test(`/next ${word} opens nothing and says what it knows`, TOKEN, async ($, on) => {
     const opened: Opened[] = []
@@ -278,35 +285,35 @@ test("a session that starts with no What's Next pane open loads nothing", TOKEN,
   expect(asked).toEqual([])
 })
 
-test('with no open epic there is no Epics pane', TOKEN, async ($, on) => {
+test('with no open issue there is no Issues pane', TOKEN, async ($, on) => {
   const opened: { id: string; title?: string }[] = []
   world(on, { epics: [epic(3, 'Project setup', { state: 'closed' })] }, [], opened)
   await $.command.run(RUN)
-  expect(opened.some(p => p.id === 'next-epics')).toBe(false)
+  expect(opened.some(p => p.id === 'next-issues')).toBe(false)
 })
 
-test('once the last epic is closed, /next closes the Epics pane', TOKEN, async ($, on) => {
+test('once the last open issue is closed, /next closes the Issues pane', TOKEN, async ($, on) => {
   const closed: string[] = []
   const w: World = { ...REPO }
   world(on, w, [], [], closed)
   await $.command.run(RUN)
   w.epics = [epic(3, 'Project setup', { state: 'closed' })]
   await $.command.run(RUN)
-  expect(closed).toEqual(['next-epics'])
+  expect(closed).toEqual(['next-issues'])
 })
 
 test('epics are found by the Epic label setting', { options: { ...TOKEN.options, label: 'theme' } }, async ($, on) => {
   const opened: { id: string; title?: string }[] = []
   world(on, { ...REPO, label: 'theme', epics: REPO.epics?.map(e => ({ ...(e as object), labels: [{ name: 'theme' }] })) }, [], opened)
   await $.command.run(RUN)
-  expect(opened.map(p => p.id)).toContain('next-epics')
+  expect(opened.map(p => p.id)).toContain('next-issues')
 })
 
 test('starts on the open milestone due first, its epics folded', TOKEN, async ($, on) => {
   const clock = world(on, REPO)
   await clock.set(NOW)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
 
   expect(await texts(ui)).toEqual([
     rule('v1.2 · ⧗ 31 Oct · 9/17 closed'),
@@ -385,7 +392,7 @@ test('an epic whose children the forge would not say has them unknown, folded an
   const clock = world(on, { ...REPO, failDeps: [25] })
   await clock.set(NOW)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   const all = await texts(ui)
   expect(all.slice(all.findIndex(t => t.startsWith('#25 ')))).toContain('      children unknown')
   expect(all).toContain('      children ● 2 · ○ 2 · ⊘ 1')
@@ -401,7 +408,7 @@ test('an epic whose children the forge would not say has them unknown, folded an
 test('the fold mark folds an epic open: its children with their marks, the closed ones counted', TOKEN, async ($, on) => {
   world(on, REPO)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
 
   await ui.press({ key: 'fold-20' })
   const all = await texts(ui)
@@ -441,7 +448,7 @@ test("under a folded epic: its facts line with its own due date in its colour, t
   })
   await clock.set(NOW)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   const all = await nodes(ui)
   const said = all.map(t => t.text)
   expect(said).toContain('      ⧗ 14 Oct · epic · ✎ 5w')
@@ -462,7 +469,7 @@ test("a child's facts line has its own due date, after what blocks it", TOKEN, a
   })
   await clock.set(NOW)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await ui.press({ key: 'fold-20' })
   const said = await texts(ui)
   expect(said).toContain('⧗ 1 Oct · ✎ 5w')
@@ -475,7 +482,7 @@ test("blocked wins over with others: a blocked child assigned to another shows �
     deps: { ...REPO.deps, 20: [issue(33, 'Retry on 502', { assignees: ['jdoe'] })] },
   })
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await ui.press({ key: 'fold-20' })
   const all = await texts(ui)
   expect(all.some(t => t.startsWith('  ⊘ #33 Retry on 502') && t.endsWith('jdoe'))).toBe(true)
@@ -489,7 +496,7 @@ test("children read like What's next: a second line with labels and age, or what
   })
   await clock.set(NOW)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await ui.press({ key: 'fold-20' })
   const found = await nodes(ui)
   expect(found.some(t => t.text === 'bug · ✎ 5w')).toBe(true)
@@ -499,20 +506,20 @@ test("children read like What's next: a second line with labels and age, or what
   expect(boxes.find(b => b.key === 'child-row-51')?.props.marginBottom).toBe(1)
 })
 
-test('Compact takes the empty lines out of Epics too', { options: { ...TOKEN.options, compact: 'on' } }, async ($, on) => {
+test('Compact takes the empty lines out of Issues too', { options: { ...TOKEN.options, compact: 'on' } }, async ($, on) => {
   world(on, REPO)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await ui.press({ key: 'fold-20' })
   const boxes = (await ui.findAll({ type: 'Box' })) as unknown as { key: string; props: Record<string, unknown> }[]
   expect(boxes.find(b => b.key === 'epic-12')?.props.marginBottom).toBe(0)
   expect(boxes.find(b => b.key === 'child-row-51')?.props.marginBottom).toBe(0)
 })
 
-test('clicking an epic opens its detail, closed ones too, and back returns to Epics', TOKEN, async ($, on) => {
+test('clicking an epic opens its detail, closed ones too, and back returns to Issues', TOKEN, async ($, on) => {
   world(on, REPO)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
 
   await ui.press({ key: 'epic-12' })
   await expect(ui.find({ key: 'back' })).resolves.toBeDefined()
@@ -526,17 +533,17 @@ test('clicking an epic opens its detail, closed ones too, and back returns to Ep
 test('the fold mark comes before its epic, so Tab stops on it first', TOKEN, async ($, on) => {
   world(on, REPO)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   const keys = ((await ui.findAll({ type: 'Button' })) as unknown as { key: string }[]).map(b => b.key)
   expect(keys.indexOf('fold-12')).toBeGreaterThan(-1)
   expect(keys.indexOf('fold-12')).toBeLessThan(keys.indexOf('epic-12'))
   expect(keys).not.toContain('fold-3')
 })
 
-test('clicking a child opens its detail, and back returns to Epics', TOKEN, async ($, on) => {
+test('clicking a child opens its detail, and back returns to Issues', TOKEN, async ($, on) => {
   world(on, REPO)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
 
   await ui.press({ key: 'fold-20' })
   await ui.press({ key: 'child-51' })
@@ -546,11 +553,11 @@ test('clicking a child opens its detail, and back returns to Epics', TOKEN, asyn
   await expect(ui.find({ key: 'epic-12' })).resolves.toBeDefined()
 })
 
-test('Close on a child goes back to Epics, the child counted closed there', TOKEN, async ($, on) => {
+test('Close on a child goes back to Issues, the child counted closed there', TOKEN, async ($, on) => {
   const w: World = { ...REPO, push: true }
   world(on, w)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await ui.press({ key: 'fold-20' })
   await ui.press({ key: 'child-51' })
   await ui.press({ key: 'close' })
@@ -562,25 +569,25 @@ test('Close on a child goes back to Epics, the child counted closed there', TOKE
   expect(await texts(ui)).toContain('  ✓ 2 closed')
 })
 
-test("the bottom line in Epics is the same rule, with What's Next's version from its manifest, and counts nothing", TOKEN, async ($, on) => {
+test("the bottom line in Issues is the same rule, with What's Next's version from its manifest, and counts nothing", TOKEN, async ($, on) => {
   world(on, REPO)
   on('fs.read', (_$, e) => (e.path.endsWith('/.claude-plugin/plugin.json') ? { value: '{"version":"9.8.7"}' } : { deny: 'not here' }))
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   const all = await nodes(ui)
   expect(all.find(t => t.text === 'v9.8.7')?.props.dimColor).toBe(true)
   expect(all.map(t => t.text).slice(-bottom('9.8.7').length)).toEqual(bottom('9.8.7'))
   expect(all.some(t => / epics?$| yours$/.test(t.text))).toBe(false)
 })
 
-test("an issue opened in Epics leaves What's next as it was", TOKEN, async ($, on) => {
+test("an issue opened in Issues leaves What's next as it was", TOKEN, async ($, on) => {
   world(on, REPO)
   await $.command.run(RUN)
-  const epics = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const epics = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await epics.press({ key: 'fold-20' })
   await epics.press({ key: 'child-51' })
 
-  const next = await $.ui.mount({ ...EPICS_PANE, requestId: 'next', surface: 'terminal' })
+  const next = await $.ui.mount({ ...ISSUES_PANE, requestId: 'next', surface: 'terminal' })
   expect(await texts(next)).toContain('No open issues in v1.2.')
   await expect(next.find({ key: 'back' })).resolves.toBeUndefined()
 })
@@ -588,7 +595,7 @@ test("an issue opened in Epics leaves What's next as it was", TOKEN, async ($, o
 test('no open milestone with epics: the epics without a milestone', TOKEN, async ($, on) => {
   world(on, { milestones: [milestone('v2', null, 1, 0)], epics: [epic(71, 'Ideas')] })
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   const all = await texts(ui)
   expect(all.slice(0, 4)).toEqual([rule('No milestone'), '── ', 'No milestone', ` ${'─'.repeat(50 - '── No milestone '.length)}`])
   expect(all).toContain('no children')
@@ -598,16 +605,16 @@ test('the rule and the bottom line keep their row when the epics are too many', 
   const many = Array.from({ length: 30 }, (_, k) => epic(100 + k, `Epic ${k}`, { milestone: 'v1.2' }))
   world(on, { milestones: REPO.milestones, epics: many })
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, props: { ...EPICS_PANE.props, scroll: { offset: 0, bodyRows: 12 } }, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, props: { ...ISSUES_PANE.props, scroll: { offset: 0, bodyRows: 12 } }, surface: 'terminal' })
   const boxes = (await ui.findAll({ type: 'Box' })) as unknown as { key: string; props: Record<string, unknown> }[]
   for (const key of ['top', 'group-0', 'where-gap', 'where']) expect(boxes.find(b => b.key === key)?.props.flexShrink).toBe(0)
 })
 
-test('Refresh in the Epics pane loads the epics again', TOKEN, async ($, on) => {
+test('Refresh in the Issues pane loads the issues again', TOKEN, async ($, on) => {
   const asked: string[] = []
   world(on, REPO, asked)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   const before = asked.filter(u => u.includes('labels=epic')).length
   await ui.press({ key: 'refresh' })
   expect(asked.filter(u => u.includes('labels=epic')).length).toBeGreaterThan(before)
@@ -623,15 +630,17 @@ test('the milestone filter shows what it is set to, and opens on the open milest
   const clock = world(on, REPO)
   await clock.set(NOW)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   expect(await label(ui)).toBe('v1.2 ▾')
   expect(await choices(ui)).toEqual([])
 
   await ui.press({ key: 'milestone' })
-  expect(await choices(ui)).toEqual(['milestone-m:v1.2', 'milestone-m:v1.3', 'milestone-none', 'milestone-all'])
+  expect(await choices(ui)).toEqual(['milestone-all', 'milestone-none', 'milestone-m:v1.2', 'milestone-m:v1.3'])
   const all = await texts(ui)
   expect(all).toContain(`${'v1.2'.padEnd(14)}31 Oct`)
-  expect(all).toContain('All'.padEnd(20))
+  // All and No milestone are actions, after a dim ▸ (#99, decided 6d).
+  expect(all).toContain('All'.padEnd(18))
+  expect(all.indexOf('All'.padEnd(18))).toBeLessThan(all.indexOf('No milestone'.padEnd(18)))
   // Pressed again, it closes.
   await ui.press({ key: 'milestone' })
   expect(await choices(ui)).toEqual([])
@@ -641,7 +650,7 @@ test('picking another milestone shows its epics', TOKEN, async ($, on) => {
   const clock = world(on, REPO)
   await clock.set(NOW)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await ui.press({ key: 'milestone' })
   await ui.press({ key: 'milestone-m:v1.3' })
   expect(await choices(ui)).toEqual([])
@@ -659,7 +668,7 @@ test("an epic's facts line counts the epics it waits on, not its children, from 
   const clock = world(on, { ...REPO, deps: { ...REPO.deps, 20: [...(REPO.deps?.[20] ?? []), epic(12, 'Auth cleanup', { milestone: 'v1.2' })] } }, asked)
   await clock.set(NOW)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   const all = await texts(ui)
   const at = all.findIndex(t => t.startsWith('#20 '))
   expect(all.slice(at).find(t => t.startsWith('      '))).toBe('      ⊘ 1 · epic · ✎ 5w')
@@ -674,7 +683,7 @@ test("an epic's facts line counts the epics it waits on, not its children, from 
 test('All shows a group per milestone, No milestone last, and counts them all', TOKEN, async ($, on) => {
   world(on, REPO)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await ui.press({ key: 'milestone' })
   await ui.press({ key: 'milestone-all' })
   const all = await texts(ui)
@@ -692,13 +701,13 @@ test('All shows a group per milestone, No milestone last, and counts them all', 
   expect(['group-0', 'group-1', 'group-2'].map(k => boxes.find(b => b.key === k)?.props.marginTop ?? 0)).toEqual([0, 1, 0])
 })
 
-test("a pick in Epics is What's next's pick too", TOKEN, async ($, on) => {
+test("a pick in Issues is What's next's pick too", TOKEN, async ($, on) => {
   world(on, REPO)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await ui.press({ key: 'milestone' })
   await ui.press({ key: 'milestone-m:v1.3' })
-  const next = await $.ui.mount({ ...EPICS_PANE, requestId: 'next', surface: 'terminal' })
+  const next = await $.ui.mount({ ...ISSUES_PANE, requestId: 'next', surface: 'terminal' })
   expect(await label(next)).toBe('v1.3 ▾')
   expect(await texts(next)).toContain('No open issues in v1.3.')
 })
@@ -706,7 +715,7 @@ test("a pick in Epics is What's next's pick too", TOKEN, async ($, on) => {
 test('the pick holds over a Refresh', TOKEN, async ($, on) => {
   world(on, REPO)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await ui.press({ key: 'milestone' })
   await ui.press({ key: 'milestone-m:v1.3' })
   await ui.press({ key: 'refresh' })
@@ -721,7 +730,7 @@ test('switching milestones and back asks Forgejo only for epics not seen yet', T
   const asked: string[] = []
   world(on, REPO, asked)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   for (const pick of ['m:v1.3', 'm:v1.2', 'all']) {
     await ui.press({ key: 'milestone' })
     await ui.press({ key: `milestone-${pick}` })
@@ -739,7 +748,7 @@ test('Refresh forgets the epics and asks again', TOKEN, async ($, on) => {
   const asked: string[] = []
   world(on, REPO, asked)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await ui.press({ key: 'refresh' })
   expect(count(asked, depsOf(12))).toBe(2)
   expect(count(asked, u => u.pathname.endsWith('/milestones') && u.searchParams.get('state') === 'open')).toBe(2)
@@ -750,7 +759,7 @@ test('who you are comes from the setup check, so a milestone filter switch asks 
   world(on, REPO, asked)
   await $.command.run(RUN)
   expect(count(asked, u => u.pathname.endsWith('/user'))).toBe(1)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   for (const pick of ['m:v1.3', 'm:v1.2', 'm:v1.3']) {
     await ui.press({ key: 'milestone' })
     await ui.press({ key: `milestone-${pick}` })
@@ -774,7 +783,7 @@ test('with Debug on, a line under the bottom line counts the requests of each ac
   const asked: string[] = []
   world(on, REPO, asked)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   const first = asked.length
   expect(await counter(ui)).toEqual([`↯ /next: ${first} requests`, `${first} this session`])
 
@@ -805,7 +814,7 @@ test('with Debug on, a line under the bottom line counts the requests of each ac
 test('with Debug off there is no counter', TOKEN, async ($, on) => {
   world(on, REPO)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   expect((await texts(ui)).some(t => t.startsWith('↯'))).toBe(false)
 })
 
@@ -1016,7 +1025,7 @@ test('on Forgejo an epic another epic depends on is no child: both at the top, t
   const asked: string[] = []
   world(on, NESTED, asked)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   const keys = await keysOf(ui)
   expect(keys).toContain('epic-80')
   expect(keys).toContain('epic-81')
@@ -1034,7 +1043,7 @@ test('on Forgejo an epic another epic depends on is no child: both at the top, t
 test('what is unfolded stays so after a Refresh and after Back from a detail', TOKEN, async ($, on) => {
   world(on, NESTED)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await ui.press({ key: 'fold-81' })
   await ui.press({ key: 'refresh' })
   expect((await texts(ui)).some(t => t.includes('#83 Leaf'))).toBe(true)
@@ -1049,88 +1058,121 @@ const MS = [
   { title: 'soon', due: '2026-10-10T00:00:00Z', closed: 0, total: 1 },
 ]
 
-test('filterOptions: open milestones with an epic, due first, then None and All', () => {
+test('filterOptions: All, No milestone, then the open milestones with an epic, due first', () => {
   expect(filterOptions(MS, [{ milestone: 'undated' }, { milestone: 'later' }, { milestone: null }])).toEqual([
+    { filter: { kind: 'all' }, label: 'All' },
+    { filter: { kind: 'none' }, label: 'No milestone' },
     { filter: { kind: 'milestone', title: 'later' }, label: 'later', due: '2026-12-01T00:00:00Z' },
     { filter: { kind: 'milestone', title: 'undated' }, label: 'undated', due: null },
-    { filter: { kind: 'none' }, label: 'None' },
-    { filter: { kind: 'all' }, label: 'All' },
   ])
   expect(filterOptions(MS, [{ milestone: 'gone' }])).toEqual([{ filter: { kind: 'all' }, label: 'All' }])
 })
 
-test("groupsFor: one milestone, the epics without one, or all of them in the milestone filter's order", () => {
-  const epics = [{ milestone: 'later' }, { milestone: 'soon' }, { milestone: null }, { milestone: 'closed one' }]
-  expect(groupsFor(ofMilestone('soon'), MS, epics).map(g => g.milestone?.title ?? null)).toEqual(['soon'])
-  expect(groupsFor(NONE, MS, epics).map(g => g.epics.length)).toEqual([1])
-  expect(groupsFor(ALL, MS, epics).map(g => g.milestone?.title ?? null)).toEqual(['soon', 'later', null])
+test('matches, withLabel, withMode: No label alone, or with or ticked along with the labels', () => {
+  const bare: { name: string }[] = []
+  const docs = [{ name: 'docs' }]
+  const bug = [{ name: 'bug' }]
+  const none = { labels: [], mode: 'and' as const, none: true }
+  expect([matches(none, bare), matches(none, docs)]).toEqual([true, false])
+  const or = { labels: ['docs'], mode: 'or' as const, none: true }
+  expect([matches(or, bare), matches(or, docs), matches(or, bug)]).toEqual([true, true, false])
+  // Under and a label ticked leaves No label; under or it stays.
+  expect(withLabel(none, 'docs', true)).toEqual({ labels: ['docs'], mode: 'and', none: false })
+  expect(withLabel({ ...none, mode: 'or' }, 'docs', true)).toEqual(or)
+  // or to and takes No label out while a label is set, else keeps it.
+  expect(withMode(or, 'and')).toEqual({ labels: ['docs'], mode: 'and', none: false })
+  expect(withMode({ ...none, mode: 'or' }, 'and')).toEqual(none)
+  // ☐ to ☑ to ☒ to ☐; one left out is never in it, under or too.
+  const all = { labels: [], mode: 'or' as const }
+  const set = stepLabel(all, 'bug')
+  const out = stepLabel(set, 'bug')
+  expect([set.labels, out.labels, out.not]).toEqual([['bug'], [], ['bug']])
+  expect(stepLabel(out, 'bug').not).toEqual([])
+  const docsNotBug = { labels: ['docs'], mode: 'or' as const, not: ['bug'] }
+  expect([matches(docsNotBug, docs), matches(docsNotBug, [...docs, ...bug]), matches(out, bare)]).toEqual([true, false, true])
 })
 
-test('Refresh opens the Epics pane once the first open epic exists, without the focus', TOKEN, async ($, on) => {
+test('leadsTo: an issue with a label left out goes, and what is under it with it', () => {
+  const kid = { number: 2, title: 'kid', state: 'open', labels: [{ name: 'docs' }] } as unknown as Child
+  const kids = (n: number) => (n === 1 ? [kid] : [])
+  const docs = (l: readonly { name: string }[]) => l.some(x => x.name === 'docs')
+  const epic = (l: readonly { name: string }[]) => l.some(x => x.name === 'epic')
+  expect(leadsTo(1, [{ name: 'epic' }], kids, docs)).toBe(true)
+  expect(leadsTo(1, [{ name: 'epic' }], kids, docs, epic)).toBe(false)
+})
+
+test("groupsFor: one milestone, the issues without one, or all of them in the milestone filter's order", () => {
+  const issues = [{ milestone: 'later' }, { milestone: 'soon' }, { milestone: null }, { milestone: 'closed one' }]
+  expect(groupsFor(ofMilestone('soon'), MS, issues).map(g => g.milestone?.title ?? null)).toEqual(['soon'])
+  expect(groupsFor(NONE, MS, issues).map(g => g.issues.length)).toEqual([1])
+  expect(groupsFor(ALL, MS, issues).map(g => g.milestone?.title ?? null)).toEqual(['soon', 'later', null])
+})
+
+test('Refresh opens the Issues pane once the first open issue exists, without the focus', TOKEN, async ($, on) => {
   const opened: Opened[] = []
   const w: World = { milestones: REPO.milestones, epics: [] }
   world(on, w, [], opened)
   await $.command.run(RUN)
-  expect(opened.map(o => o.id)).not.toContain('next-epics')
+  expect(opened.map(o => o.id)).not.toContain('next-issues')
 
   w.epics = [epic(40, 'First epic', { milestone: 'v1.2' })]
-  const next = await $.ui.mount({ ...EPICS_PANE, requestId: 'next', surface: 'terminal' })
+  const next = await $.ui.mount({ ...ISSUES_PANE, requestId: 'next', surface: 'terminal' })
   await next.press({ key: 'refresh' })
-  expect(opened).toContainEqual({ id: 'next-epics', title: 'Epics' })
+  expect(opened).toContainEqual({ id: 'next-issues', title: 'Issues' })
 })
 
-test('Refresh closes the Epics pane once the last open epic is closed', TOKEN, async ($, on) => {
+test('Refresh closes the Issues pane once the last open issue is closed', TOKEN, async ($, on) => {
   const closed: string[] = []
   const w: World = { ...REPO }
   world(on, w, [], [], closed)
   await $.command.run(RUN)
-  const next = await $.ui.mount({ ...EPICS_PANE, requestId: 'next', surface: 'terminal' })
+  const next = await $.ui.mount({ ...ISSUES_PANE, requestId: 'next', surface: 'terminal' })
 
   w.epics = [epic(3, 'Project setup', { milestone: 'v1.2', state: 'closed' })]
   await next.press({ key: 'refresh' })
-  expect(closed).toContain('next-epics')
+  expect(closed).toContain('next-issues')
 })
 
-test('an Epics pane waiting undrawn is opened again by Refresh, so it is drawn', TOKEN, async ($, on) => {
+test('an Issues pane waiting undrawn is opened again by Refresh, so it is drawn', TOKEN, async ($, on) => {
   const opened: Opened[] = []
   world(on, REPO, [], opened)
-  // The engine's record: Epics open, but not placed (a narrow terminal).
+  // The engine's record: Issues open, but not placed (a narrow terminal).
   on('ui.panes', () => ({
     value: [
       { id: 'next', title: "What's next", isShown: true, isFocused: false, isPlaced: true },
-      { id: 'next-epics', title: 'Epics', isShown: false, isFocused: false, isPlaced: false },
+      { id: 'next-issues', title: 'Issues', isShown: false, isFocused: false, isPlaced: false },
     ],
   }))
   await $.command.run(RUN)
-  const count = opened.filter(o => o.id === 'next-epics').length
+  const count = opened.filter(o => o.id === 'next-issues').length
 
-  const next = await $.ui.mount({ ...EPICS_PANE, requestId: 'next', surface: 'terminal' })
+  const next = await $.ui.mount({ ...ISSUES_PANE, requestId: 'next', surface: 'terminal' })
   await next.press({ key: 'refresh' })
-  expect(opened.filter(o => o.id === 'next-epics').length).toBe(count + 1)
+  expect(opened.filter(o => o.id === 'next-issues').length).toBe(count + 1)
 })
 
-test('a drawn Epics pane is not opened again by Refresh', TOKEN, async ($, on) => {
+test('a drawn Issues pane is not opened again by Refresh', TOKEN, async ($, on) => {
   const opened: Opened[] = []
   world(on, REPO, [], opened)
   on('ui.panes', () => ({
     value: [
       { id: 'next', title: "What's next", isShown: true, isFocused: false, isPlaced: true },
-      { id: 'next-epics', title: 'Epics', isShown: false, isFocused: false, isPlaced: true },
+      { id: 'next-issues', title: 'Issues', isShown: false, isFocused: false, isPlaced: true },
     ],
   }))
   await $.command.run(RUN)
-  const count = opened.filter(o => o.id === 'next-epics').length
+  const count = opened.filter(o => o.id === 'next-issues').length
 
-  const next = await $.ui.mount({ ...EPICS_PANE, requestId: 'next', surface: 'terminal' })
+  const next = await $.ui.mount({ ...ISSUES_PANE, requestId: 'next', surface: 'terminal' })
   await next.press({ key: 'refresh' })
-  expect(opened.filter(o => o.id === 'next-epics').length).toBe(count)
+  expect(opened.filter(o => o.id === 'next-issues').length).toBe(count)
 })
 
-test('once Refresh closes the Epics and Milestones panes, the title row names What\'s next again', TOKEN, async ($, on) => {
+test('once Refresh closes the Issues and Milestones panes, the title row names What\'s next again', TOKEN, async ($, on) => {
   const w: World = { ...REPO }
   world(on, w)
   await $.command.run(RUN)
-  const next = await $.ui.mount({ ...EPICS_PANE, requestId: 'next', surface: 'terminal' })
+  const next = await $.ui.mount({ ...ISSUES_PANE, requestId: 'next', surface: 'terminal' })
   w.epics = [epic(3, 'Project setup', { state: 'closed' })]
   w.milestones = []
   await next.press({ key: 'refresh' })
@@ -1152,4 +1194,290 @@ test('markOf: one shape per standing on a row that does not fold, ⊕ and ⊖ co
   // An epic or milestone at the top has no standing: plain, grey once closed.
   expect(markOf(null, 'folded')).toEqual({ glyph: '⊕' })
   expect(markOf(null, 'unfolded', true)).toEqual({ glyph: '⊖', color: 'inactive' })
+})
+
+// #99: Issues shows the open issues, not only epics. v1.2 holds Rate limits
+// (#20, whose children are #37, #51, #44, #33) and three issues no epic
+// holds: alice's #55, the free #58 and jdoe's #52; the repo's labels are
+// bug and docs.
+const ISSUES: World = {
+  ...REPO,
+  issues: [
+    issue(55, 'Token settings per host', { milestone: 'v1.2', assignees: ['alice'], labels: ['docs'] }),
+    issue(58, 'Help page for Issues', { milestone: 'v1.2', labels: ['docs', 'bug'] }),
+    issue(52, 'Release 1.1.0', { milestone: 'v1.2', assignees: ['jdoe'] }),
+  ],
+  labels: [
+    { id: 1, name: 'bug', color: 'e57373' },
+    { id: 2, name: 'docs', color: '7aa2f7' },
+  ],
+}
+
+const labelOf = async (ui: { find: (q: { key: string }) => Promise<unknown> }, key: string) =>
+  ((await ui.find({ key })) as { props: Record<string, unknown> } | undefined)?.props.label
+// Where issue `n`'s row is: its mark and number then its title, or for an
+// epic or a closed epic, its number then its title; -1 when it is not drawn.
+const rowOf = (all: string[], n: number) => all.findIndex(t => new RegExp(`^(?:[●○◌⊘] | *)#${n} \\S`).test(t))
+
+test('Issues shows the open issues no epic holds after the epics of their milestone, yours first', TOKEN, async ($, on) => {
+  world(on, ISSUES)
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  const all = await texts(ui)
+  // The epics at the top of v1.2's group, then yours, available, with others.
+  expect(rowOf(all, 25)).toBeGreaterThan(-1)
+  expect(rowOf(all, 25)).toBeLessThan(rowOf(all, 55))
+  expect(rowOf(all, 55)).toBeLessThan(rowOf(all, 58))
+  expect(rowOf(all, 58)).toBeLessThan(rowOf(all, 52))
+  expect(all[rowOf(all, 55)]?.startsWith('●')).toBe(true)
+  expect(all).toContain('jdoe')
+  // The closed epic last, grey.
+  expect(rowOf(all, 52)).toBeLessThan(all.findIndex(t => t.includes('#3 ')))
+  await ui.press({ key: 'issue-58' })
+  await expect(ui.find({ key: 'back' })).resolves.toBeDefined()
+})
+
+test('Issues opens while the repo has open issues, though none is an epic', TOKEN, async ($, on) => {
+  const opened: Opened[] = []
+  world(on, { ...ISSUES, epics: [] }, [], opened)
+  await $.command.run(RUN)
+  expect(opened).toContainEqual({ id: 'next-issues', title: 'Issues' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  expect(rowOf(await texts(ui), 58)).toBeGreaterThan(-1)
+})
+
+test('the label filter: its button left of the milestone filter says All, opens a box per label, and a tick narrows Issues', TOKEN, async ($, on) => {
+  world(on, ISSUES)
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  expect(await labelOf(ui, 'labels')).toBe('All ▾')
+  const keys = (await ui.findAll({ type: 'Button' })).map(b => (b as unknown as { key: string }).key)
+  expect(keys.indexOf('labels')).toBeLessThan(keys.indexOf('milestone'))
+  await ui.press({ key: 'labels' })
+  const list = await texts(ui)
+  expect(list).toContain('and')
+  expect(list).toContain('or')
+  expect(list.some(t => t.startsWith('☐ ') && t.includes('bug'))).toBe(true)
+  // docs: #55 and #58 stay, #52 goes; the epics have no docs label, nor
+  // anything under them.
+  await ui.press({ key: 'toggle-label-1' })
+  const all = await texts(ui)
+  expect(all.some(t => t.startsWith('☑ ') && t.includes('docs'))).toBe(true)
+  expect(rowOf(all, 55)).toBeGreaterThan(-1)
+  expect(rowOf(all, 58)).toBeGreaterThan(-1)
+  expect(rowOf(all, 52)).toBe(-1)
+  expect(rowOf(all, 20)).toBe(-1)
+  // The button names what is set, as the milestone filter's does.
+  expect(await labelOf(ui, 'labels')).toBe('docs ▾')
+})
+
+test('the label filter: and needs every label set, or one of them', TOKEN, async ($, on) => {
+  world(on, ISSUES)
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  await ui.press({ key: 'labels' })
+  await ui.press({ key: 'toggle-label-0' })
+  await ui.press({ key: 'toggle-label-1' })
+  // and: #58 alone has bug and docs.
+  let all = await texts(ui)
+  expect(await labelOf(ui, 'labels')).toBe('bug and docs ▾')
+  expect((await nodes(ui)).find(n => n.text === ' and ')?.props.dimColor).toBe(true)
+  expect(rowOf(all, 58)).toBeGreaterThan(-1)
+  expect(rowOf(all, 55)).toBe(-1)
+  await ui.press({ key: 'label-or' })
+  all = await texts(ui)
+  expect(await labelOf(ui, 'labels')).toBe('bug or docs ▾')
+  expect(rowOf(all, 55)).toBeGreaterThan(-1)
+  expect((await nodes(ui)).find(n => n.text === 'or' && n.props.bold === true)).toBeDefined()
+})
+
+test("the label filter is What's next's too, and /next sets it on no labels again", TOKEN, async ($, on) => {
+  world(on, ISSUES)
+  await $.command.run(RUN)
+  const issues = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  await issues.press({ key: 'labels' })
+  await issues.press({ key: 'toggle-label-0' })
+  const next = await $.ui.mount({ ...ISSUES_PANE, requestId: 'next', surface: 'terminal' })
+  expect(await labelOf(next, 'labels')).toBe('bug ▾')
+  let all = await texts(next)
+  // Your #55 has no bug label: In progress leaves it out; #58 has it.
+  expect(all.some(t => t.includes('#55 '))).toBe(false)
+  expect(all.some(t => t.includes('#58 '))).toBe(true)
+  await $.command.run(RUN)
+  all = await texts(next)
+  expect(await labelOf(next, 'labels')).toBe('All ▾')
+  expect(all.some(t => t.includes('#55 '))).toBe(true)
+})
+
+test('under the label filter an epic stays while a child matches; unfolded, only what matches, its count the whole epic\'s', TOKEN, async ($, on) => {
+  world(on, {
+    ...ISSUES,
+    deps: { ...REPO.deps, 20: [issue(37, 'Token refresh on 401', { labels: ['bug'] }), issue(51, 'Rate limit settings page'), issue(10, 'Old limits', { state: 'closed' })] },
+  })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  await ui.press({ key: 'labels' })
+  await ui.press({ key: 'toggle-label-0' })
+  await ui.press({ key: 'labels' })
+  await ui.press({ key: 'fold-20' })
+  const all = await texts(ui)
+  expect(rowOf(all, 20)).toBeGreaterThan(-1)
+  expect(all.some(t => t.includes('1/3'))).toBe(true)
+  expect(all.some(t => t.includes('#37 '))).toBe(true)
+  expect(all.some(t => t.includes('#51 '))).toBe(false)
+  // Auth cleanup (#12) has nothing with bug in it.
+  expect(rowOf(all, 12)).toBe(-1)
+})
+
+test('only the epics: the epic label ticked in the label filter', TOKEN, async ($, on) => {
+  world(on, { ...ISSUES, labels: [...(ISSUES.labels ?? []), { id: 3, name: 'epic', color: 'c792ea' }] })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  await ui.press({ key: 'labels' })
+  await ui.press({ key: 'toggle-label-2' })
+  const all = await texts(ui)
+  expect(rowOf(all, 20)).toBeGreaterThan(-1)
+  expect(rowOf(all, 12)).toBeGreaterThan(-1)
+  expect(rowOf(all, 55)).toBe(-1)
+  expect(rowOf(all, 58)).toBe(-1)
+})
+
+test("with labels set that no issue has, Issues and What's next say so", TOKEN, async ($, on) => {
+  world(on, { ...ISSUES, labels: [{ id: 9, name: 'wontfix', color: '' }] })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  await ui.press({ key: 'labels' })
+  await ui.press({ key: 'toggle-label-0' })
+  expect(await texts(ui)).toContain('No open issues with these labels.')
+  const next = await $.ui.mount({ ...ISSUES_PANE, requestId: 'next', surface: 'terminal' })
+  expect(await texts(next)).toContain('No open issues with these labels.')
+})
+
+test('a label set that the repo no longer has keeps its box, so it can be taken out', TOKEN, async ($, on) => {
+  const w: World = { ...ISSUES }
+  world(on, w)
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  await ui.press({ key: 'labels' })
+  await ui.press({ key: 'toggle-label-0' })
+  // bug is renamed on the forge; Refresh reads the labels again.
+  w.labels = [{ id: 2, name: 'docs', color: '7aa2f7' }]
+  await ui.press({ key: 'refresh' })
+  const all = await texts(ui)
+  expect(all.some(t => t.startsWith('☑ ') && t.includes('bug'))).toBe(true)
+  // ☑ to ☒, then ☐.
+  await ui.press({ key: 'toggle-label-1' })
+  expect(await labelOf(ui, 'labels')).toBe('not bug ▾')
+  await ui.press({ key: 'toggle-label-1' })
+  expect(await labelOf(ui, 'labels')).toBe('All ▾')
+})
+
+test('▸ All, under and · or, takes every label out of the label filter at once', TOKEN, async ($, on) => {
+  world(on, ISSUES)
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  await ui.press({ key: 'labels' })
+  const lines = (await texts(ui)).map(t => t.trim())
+  expect(lines.indexOf('or')).toBeLessThan(lines.indexOf('All'))
+  expect(lines.indexOf('All')).toBeLessThan(lines.indexOf('No label'))
+  expect(lines.indexOf('No label')).toBeLessThan(lines.findIndex(t => t.startsWith('☐ ')))
+  // ▸ before each, dim; All bold while it is set.
+  expect((await nodes(ui)).filter(n => n.text === '▸ ').every(n => n.props.dimColor === true)).toBe(true)
+  expect((await nodes(ui)).find(n => n.text.trim() === 'All')?.props.bold).toBe(true)
+  await ui.press({ key: 'toggle-label-0' })
+  await ui.press({ key: 'toggle-label-1' })
+  expect(await labelOf(ui, 'labels')).toBe('bug and docs ▾')
+  expect((await nodes(ui)).find(n => n.text.trim() === 'All')?.props.bold).toBe(false)
+  await ui.press({ key: 'label-all' })
+  const all = await texts(ui)
+  expect(await labelOf(ui, 'labels')).toBe('All ▾')
+  expect(all.some(t => t.startsWith('☑ '))).toBe(false)
+  expect(rowOf(all, 52)).toBeGreaterThan(-1)
+})
+
+test('under and, ▸ No label shows only the issues without a label, and its button says so; a label ticked leaves it', TOKEN, async ($, on) => {
+  world(on, ISSUES)
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  await ui.press({ key: 'labels' })
+  await ui.press({ key: 'toggle-label-1' })
+  await ui.press({ key: 'label-none' })
+  expect(await labelOf(ui, 'labels')).toBe('No label ▾')
+  let all = await texts(ui)
+  expect((await nodes(ui)).find(n => n.text.trim() === 'No label')?.props.bold).toBe(true)
+  expect(all.some(t => t.startsWith('☑ '))).toBe(false)
+  // jdoe's #52 has no label; #55 and #58 have, and so do the epics.
+  expect(rowOf(all, 52)).toBeGreaterThan(-1)
+  expect(rowOf(all, 55)).toBe(-1)
+  expect(rowOf(all, 58)).toBe(-1)
+  await ui.press({ key: 'toggle-label-1' })
+  expect(await labelOf(ui, 'labels')).toBe('docs ▾')
+  all = await texts(ui)
+  expect(rowOf(all, 52)).toBe(-1)
+  expect(rowOf(all, 55)).toBeGreaterThan(-1)
+})
+
+test('under or, No label is a box that ticks along with the labels; and takes it out again, the labels kept', TOKEN, async ($, on) => {
+  world(on, ISSUES)
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  await ui.press({ key: 'labels' })
+  await ui.press({ key: 'label-or' })
+  expect((await texts(ui)).some(t => t.startsWith('☐ No label'))).toBe(true)
+  await ui.press({ key: 'label-none' })
+  expect(await labelOf(ui, 'labels')).toBe('No label ▾')
+  await ui.press({ key: 'toggle-label-1' })
+  expect(await labelOf(ui, 'labels')).toBe('No label or docs ▾')
+  let all = await texts(ui)
+  expect(all.some(t => t.startsWith('☑ No label'))).toBe(true)
+  // #52 has no label, #55 and #58 have docs.
+  expect(rowOf(all, 52)).toBeGreaterThan(-1)
+  expect(rowOf(all, 55)).toBeGreaterThan(-1)
+  expect(rowOf(all, 58)).toBeGreaterThan(-1)
+  // and: No label goes, docs stays (#99, decided K1).
+  await ui.press({ key: 'label-and' })
+  expect(await labelOf(ui, 'labels')).toBe('docs ▾')
+  all = await texts(ui)
+  expect(all.some(t => t.trim() === 'No label')).toBe(true)
+  expect(rowOf(all, 52)).toBe(-1)
+  expect(rowOf(all, 55)).toBeGreaterThan(-1)
+})
+
+test('a box steps ☐ ☑ ☒: a label left out takes its issues out, under and and or alike', TOKEN, async ($, on) => {
+  world(on, ISSUES)
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  await ui.press({ key: 'labels' })
+  await ui.press({ key: 'toggle-label-0' })
+  await ui.press({ key: 'toggle-label-0' })
+  expect(await labelOf(ui, 'labels')).toBe('not bug ▾')
+  let all = await texts(ui)
+  expect(all.some(t => t.startsWith('☒ ') && t.includes('bug'))).toBe(true)
+  // #58 has bug; #55 (docs) and #52 (no label) stay.
+  expect(rowOf(all, 58)).toBe(-1)
+  expect(rowOf(all, 55)).toBeGreaterThan(-1)
+  expect(rowOf(all, 52)).toBeGreaterThan(-1)
+  await ui.press({ key: 'label-or' })
+  await ui.press({ key: 'toggle-label-1' })
+  expect(await labelOf(ui, 'labels')).toBe('docs, not bug ▾')
+  all = await texts(ui)
+  expect(rowOf(all, 55)).toBeGreaterThan(-1)
+  expect(rowOf(all, 58)).toBe(-1)
+  expect(rowOf(all, 52)).toBe(-1)
+  // ▸ All takes the ones left out too.
+  await ui.press({ key: 'label-all' })
+  expect(await labelOf(ui, 'labels')).toBe('All ▾')
+  expect((await texts(ui)).some(t => t.startsWith('☒ '))).toBe(false)
+})
+
+test('on a narrow pane the label filter\'s button is cut with …', { options: { ...TOKEN.options } }, async ($, on) => {
+  world(on, { ...ISSUES, labels: [{ id: 1, name: 'a-rather-long-label', color: '' }, { id: 2, name: 'another-long-one', color: '' }] })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
+  await ui.press({ key: 'labels' })
+  await ui.press({ key: 'toggle-label-0' })
+  await ui.press({ key: 'toggle-label-1' })
+  const label = String(await labelOf(ui, 'labels'))
+  expect(label.endsWith('… ▾')).toBe(true)
+  expect(label.startsWith('a-rather-long-label')).toBe(true)
 })

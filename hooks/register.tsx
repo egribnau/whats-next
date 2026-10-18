@@ -1,21 +1,21 @@
 import { atom, memberOf, read, update } from 'claude-code'
 import type { EngineInterface, Hook, Register, RenderInput, Timer } from 'claude-code'
 
-import type { Comment, Detail, Epic, Epics, IssueDetail, IssueRow, Label, Milestone, MilestoneFilter, Overview, ParentChoices, Ref, Repo, RepoLabels, Setup, TokenSource } from '../types'
+import type { Comment, Detail, Epic, IssueDetail, IssueRow, Issues, Label, LabelFilter, Milestone, MilestoneFilter, Overview, ParentChoices, Ref, Repo, RepoLabels, Setup, TokenSource } from '../types'
 import { draw, type Look } from './draw'
 import { inMilestone } from './epics'
 import { configureCommand, type Forge, type TokenSetting } from './forge'
-import { ALL, filterWord, sameFilter } from './filter'
+import { ALL, filterWord, isAll, NO_LABELS, sameFilter } from './filter'
 import { changesSince, loadRepo, noteChange, noteParents, parentsSince, type Known } from './load'
 import { anyToken, checkForge, findRepo, trackerFor, type Tokens } from './setup'
 import { message, slug, type Send, type Tracker } from './tracker'
 import * as step from './where'
 import { issueOf } from './where'
-import { EPICS_PANE, go, MILESTONES_PANE, milestoneShown, PANE, placeOf } from './panes'
-import { epicsView } from './views/epics'
+import { go, ISSUES_PANE, MILESTONES_PANE, milestoneShown, PANE, placeOf } from './panes'
 import { frame, hidden, listShown, views, type Acts, type Pane } from './views/frame'
 import { helpView } from './views/help'
 import { issueView } from './views/issue'
+import { issuesView } from './views/issues'
 import { milestonesView } from './views/milestones'
 import { nextView } from './views/next'
 import { compactChoice, iconsChoice, setupView } from './views/setup'
@@ -36,7 +36,7 @@ const parentChoices = atom({ plugin: 'whats-next', key: 'parentChoices' } as con
 const spinner = atom({ plugin: 'whats-next', key: 'spinner' } as const, 0)
 const iconsChosen = atom({ plugin: 'whats-next', key: 'icons' } as const, null)
 const compactChosen = atom({ plugin: 'whats-next', key: 'compact' } as const, null)
-const epics = atom({ plugin: 'whats-next', key: 'epics' } as const, { kind: 'idle' })
+const issues = atom({ plugin: 'whats-next', key: 'issues' } as const, { kind: 'idle' })
 const unfolded = atom({ plugin: 'whats-next', key: 'unfolded' } as const, [])
 const treeKids = atom({ plugin: 'whats-next', key: 'treeKids' } as const, {})
 const issuesFolded = atom({ plugin: 'whats-next', key: 'issuesFolded' } as const, false)
@@ -50,6 +50,7 @@ const panesOpen = atom({ plugin: 'whats-next', key: 'panesOpen' } as const, [])
 const filterChosen = atom({ plugin: 'whats-next', key: 'filterChosen' } as const, null)
 const filterShown = atom({ plugin: 'whats-next', key: 'filterShown' } as const, null)
 const filterOpen = atom({ plugin: 'whats-next', key: 'filterOpen' } as const, false)
+const labelFilter = atom({ plugin: 'whats-next', key: 'labelFilter' } as const, { labels: [], mode: 'and' })
 const repoLabels = atom({ plugin: 'whats-next', key: 'repoLabels' } as const, { kind: 'idle' })
 const childrenToo = atom({ plugin: 'whats-next', key: 'childrenToo' } as const, true)
 const requests = atom({ plugin: 'whats-next', key: 'requests' } as const, null)
@@ -157,13 +158,13 @@ let known: Known | null = null
 
 // Asks the tracker for what the panes show: the open milestones, your open
 // issues, the repo's open issues, and the epics. Then the milestones, the
-// milestone filter, What's next and the epics follow. What was known before
+// milestone filter, What's next and Issues follow. What was known before
 // goes to What's next, which tells an issue that left the lists from one
 // that was never in them.
 async function load($: EngineInterface, r: Repo) {
   const before = known
   if ((await read($, overview)).kind !== 'ok') await update($, overview, (): Overview => ({ kind: 'loading' }))
-  if ((await read($, epics)).kind !== 'ok') await update($, epics, (): Epics => ({ kind: 'loading' }))
+  if ((await read($, issues)).kind !== 'ok') await update($, issues, (): Issues => ({ kind: 'loading' }))
   const s = await read($, setup)
   const ready = s.kind === 'ready'
   const loaded = await loadRepo(tracker($, r), {
@@ -174,13 +175,14 @@ async function load($: EngineInterface, r: Repo) {
   })
   const { issuesError, epicsError } = loaded
   if (issuesError !== null) await update($, overview, (): Overview => ({ kind: 'error', message: issuesError }))
-  if (epicsError !== null) await update($, epics, (): Epics => ({ kind: 'error', message: epicsError }))
+  const issuesFailed = issuesError ?? epicsError
+  if (issuesFailed !== null) await update($, issues, (): Issues => ({ kind: 'error', message: issuesFailed }))
   known = loaded
   await update($, milestones, () => loaded.milestones)
   await update($, closedMilestones, () => loaded.closedMilestones)
   await showFilter($)
   if (issuesError === null) await showNext($, before)
-  if (epicsError === null) await showEpics($)
+  if (issuesFailed === null) await showIssues($)
   // The milestones folded open, and the one in its detail, are asked again;
   // the rest cost nothing.
   await update($, msIssues, () => ({}))
@@ -197,17 +199,21 @@ async function showMilestone($: EngineInterface, title: string) {
   await showTree($)
 }
 
+// The open epics at the top of a group's tree, as the trees start.
+const topOf = (l: Parameters<typeof inMilestone>[0]): Epic[] =>
+  inMilestone(l).epics.map(e => ({ number: e.number, title: e.title, state: e.state, due: e.due, children: e.children ?? null }))
+
 // The children every tree shown needs, as far as it is folded open: the
-// Epics pane's, each milestone's folded open, and the one in its detail.
+// Issues pane's, each milestone's folded open, and the one in its detail.
 async function showTree($: EngineInterface) {
   if (!known) return
-  const ep = await read($, epics)
-  const trees: Epic[][] = ep.kind === 'ok' ? [ep.groups.flatMap(g => g.epics)] : []
+  const shown = await read($, issues)
+  const trees: Epic[][] = shown.kind === 'ok' ? shown.groups.map(g => topOf(g.issues)) : []
   const issuesOf = await read($, msIssues)
   const inDetail = await milestoneShown($)
   for (const title of new Set([...(await read($, milestonesUnfolded)), ...(inDetail === null ? [] : [inDetail])])) {
-    const issues = issuesOf[title]
-    if (issues) trees.push(inMilestone(issues).epics.map(e => ({ number: e.number, title: e.title, state: e.state, due: e.due, children: e.children ?? null })))
+    const listed = issuesOf[title]
+    if (listed) trees.push(topOf(listed))
   }
   const kids = await known.grow(trees, new Set(await read($, unfolded)))
   await update($, treeKids, () => kids)
@@ -266,7 +272,7 @@ const filterSet = async ($: EngineInterface): Promise<MilestoneFilter> => (await
 async function showNext($: EngineInterface, before: Known | null = null) {
   const k = known
   if (!k) return
-  const next = await k.whatsNext(await filterSet($), await $.clock.now())
+  const next = await k.whatsNext(await filterSet($), await $.clock.now(), await read($, labelFilter))
   await update($, overview, (): Overview => ({ kind: 'ok', ...next }))
   // An issue the pane listed open before the load, and lists open no more
   // (closed, or taken by someone else), closes: What's next shows. One it
@@ -278,21 +284,18 @@ async function showNext($: EngineInterface, before: Known | null = null) {
   })
 }
 
-// The epics within the milestone filter, by milestone. What was shown stays
-// up while this loads, so the milestone filter does not vanish under the person's hand.
-async function showEpics($: EngineInterface) {
+// The open issues within the milestone filter, by milestone. What was shown
+// stays up while this loads, so the milestone filter does not vanish under
+// the person's hand.
+async function showIssues($: EngineInterface) {
   if (!known) return
-  const openEpics = known.openEpics.size
-  if (openEpics === 0) {
-    await update($, epics, (): Epics => ({ kind: 'ok', groups: [], openEpics, held: [] }))
-    return
-  }
-  const shown = await known.epics(await filterSet($))
-  await update($, epics, (): Epics => ({ kind: 'ok', ...shown, openEpics }))
+  const groups = await known.issues(await filterSet($))
+  if (groups === null) return
+  await update($, issues, (): Issues => ({ kind: 'ok', groups, openIssues: known?.openIssues() ?? 0 }))
   await showTree($)
 }
 
-// Folds issue `n` open or shut in Epics; open, the children it now shows
+// Folds issue `n` open or shut in a tree; open, the children it now shows
 // are asked for, those not asked before.
 async function foldIssue($: EngineInterface, n: number) {
   const was = await read($, unfolded)
@@ -309,7 +312,17 @@ async function setFilter($: EngineInterface, filter: MilestoneFilter, label: str
   await counted($, label, async () => {
     await showFilter($)
     if ((await read($, overview)).kind === 'ok') await showNext($)
-    await showEpics($)
+    await showIssues($)
+  })
+}
+
+// Sets the label filter for both panes, by `change`; its list stays open
+// for the next. What's next follows; Issues draws from what it has.
+async function setLabelFilter($: EngineInterface, change: (f: LabelFilter) => LabelFilter, label: string) {
+  await update($, labelFilter, f => change(Array.isArray(f?.labels) ? f : NO_LABELS))
+  if (!known) return
+  await counted($, label, async () => {
+    if ((await read($, overview)).kind === 'ok') await showNext($)
   })
 }
 
@@ -405,52 +418,50 @@ async function loadIssue($: EngineInterface, pane: string, n: number | null) {
   await counted($, `#${n}`, () => loadDetail($, r, pane, n))
 }
 
-// Pane `pane` shows its list again: What's next or the epics.
+// Pane `pane` shows its list again: What's next, Issues or Milestones.
 async function backToList($: EngineInterface, pane: string) {
   await go($, pane, step.list)
   await update($, memberOf(detail, { requestId: pane }), (): Detail => ({ kind: 'idle' }))
 }
 
-// Checks setup and, once it passes, loads What's next and the epics and,
-// where an issue is open, that issue again. The Epics and Milestones panes
+// Checks setup and, once it passes, loads What's next and Issues and,
+// where an issue is open, that issue again. The Issues and Milestones panes
 // follow what the load found (`followPane`), unless `follow` is off: /next
 // opens them itself, in its own order, once What's next is placed.
 async function refresh($: EngineInterface, follow = true): Promise<Repo | null> {
   issuesRead.clear()
-  for (const pane of [PANE, EPICS_PANE, MILESTONES_PANE]) await showRefusal($, pane, null)
+  for (const pane of [PANE, ISSUES_PANE, MILESTONES_PANE]) await showRefusal($, pane, null)
   await update($, repoLabels, (): RepoLabels => ({ kind: 'idle' }))
   await update($, childrenToo, () => true)
   const r = await check($)
   if (r && (await read($, setup)).kind === 'ready') {
-    const before = await read($, epics)
+    const before = await read($, issues)
     const hadMilestones = ((await read($, milestones)) ?? []).length > 0
     await load($, r)
-    const after = await read($, epics)
+    const after = await read($, issues)
     if (follow && after.kind === 'ok') {
-      await followPane($, EPICS_PANE, 'Epics', before.kind === 'ok' && before.openEpics > 0, after.openEpics > 0)
+      await followPane($, ISSUES_PANE, 'Issues', before.kind === 'ok' && before.openIssues > 0, after.openIssues > 0)
     }
     if (follow) await followPane($, MILESTONES_PANE, 'Milestones', hadMilestones, ((await read($, milestones)) ?? []).length > 0)
-    for (const pane of [PANE, EPICS_PANE, MILESTONES_PANE]) {
+    for (const pane of [PANE, ISSUES_PANE, MILESTONES_PANE]) {
       const n = issueOf(await placeOf($, pane))
       if (n !== null) await loadDetail($, r, pane, n)
       else await update($, memberOf(detail, { requestId: pane }), (): Detail => ({ kind: 'idle' }))
     }
-    // A labels list open is asked for again.
-    for (const pane of [PANE, EPICS_PANE, MILESTONES_PANE]) {
-      if ((await placeOf($, pane)).labels) {
-        await loadLabels($)
-        break
-      }
-    }
+    // A labels list open is asked for again, and the labels' colours while
+    // the label filter is set to some.
+    const panes = [PANE, ISSUES_PANE, MILESTONES_PANE]
+    const open = (await Promise.all(panes.map(async pane => (await placeOf($, pane)).labels))).some(Boolean)
+    if (open || !isAll(await read($, labelFilter))) await loadLabels($)
   } else {
     await update($, overview, (): Overview => ({ kind: 'idle' }))
-    await update($, epics, (): Epics => ({ kind: 'idle' }))
+    await update($, issues, (): Issues => ({ kind: 'idle' }))
   }
   return r
 }
 
-// The Epics or Milestones pane, `id`, follows a load that found the first
-// open epic or milestone (`had` none before, `has` one now), or none left:
+// The Issues or Milestones pane, `id`, follows a load that found the first
+// open issue or milestone (`had` none before, `has` one now), or none left:
 // it opens as a tab next to What's next, without the focus, or closes. A
 // pane the person closed while there was something to show stays closed
 // until /next. One opened without the person asking (a reload) may wait
@@ -482,7 +493,7 @@ async function openUrl($: EngineInterface, url: string) {
 
 
 // Changes issue `n` with `change` (`what` names it for a refusal), then
-// reads it again with What's next and the epics, so the change shows
+// reads it again with What's next and Issues, so the change shows
 // everywhere. Pane `pane` goes back to its list, unless it `stay`s on the
 // issue; a refusal keeps the issue open there, shown under its actions.
 // `after` goes after the issue's number in the refusal (` to v1.2`);
@@ -512,7 +523,7 @@ async function writeIssue(
   const others = also()
   for (const o of others) issuesRead.delete(`${r.host}/${slug(r)}#${o}`)
   if (!stay) await backToList($, pane)
-  for (const p of [PANE, EPICS_PANE, MILESTONES_PANE]) {
+  for (const p of [PANE, ISSUES_PANE, MILESTONES_PANE]) {
     if (issueOf(await placeOf($, p)) === n) await loadDetail($, r, p, n, stay && p === pane)
   }
   // The issue as the change left it, read again unless a pane just did, so
@@ -701,8 +712,8 @@ async function toggleParents($: EngineInterface, pane: string, i: IssueDetail, c
   if (!(await placeOf($, pane)).parents || !k) return
   const at = memberOf(parentChoices, { requestId: pane })
   await update($, at, (): ParentChoices => ({ kind: 'loading', number: i.number }))
-  const { epics, issues } = await k.choices(i.number, i.milestone?.title ?? null, children)
-  await update($, at, (): ParentChoices => ({ kind: 'ok', number: i.number, epics, issues }))
+  const offered = await k.choices(i.number, i.milestone?.title ?? null, children)
+  await update($, at, (): ParentChoices => ({ kind: 'ok', number: i.number, ...offered }))
 }
 
 // Issue `i` put under `p`, or taken out of it; for null taken out of each of
@@ -837,6 +848,11 @@ const focusMoved: Hook<'ui.focus'> = async ($, e, next) => {
   // A line out of the labels list's, the milestone list's or the epic
   // list's view scrolls that list, not the detail.
   const listed = listShown.get(e.requestId)
+  // The label filter's `and · or`, ▸ All and No label are its list's first lines, above the labels.
+  if (listed?.list === 'labels' && ['label-and', 'label-or', 'label-all', 'label-none'].includes(e.element ?? '')) {
+    if ((await placeOf($, e.requestId)).labels?.scroll) await go($, e.requestId, w => step.scrollLabels(w, 0))
+    return next(e)
+  }
   const line = /^(toggle-label|pick-milestone|pick-parent)-(\d+)$/.exec(e.element ?? '')
   const lists = { 'toggle-label': 'labels', 'pick-milestone': 'milestones', 'pick-parent': 'parents' } as const
   if (listed && line && lists[line[1] as keyof typeof lists] === listed.list) {
@@ -934,6 +950,7 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
     icons: icons === 'icons',
     today: await $.clock.now(),
     filter: await read($, filterShown),
+    labels: await read($, labelFilter),
     unblocks: m.kind === 'ok' ? m.unblocks : {},
     dueBy: m.kind === 'ok' ? m.dueBy : {},
   }
@@ -943,6 +960,7 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
     showHelp: () => showHelp($, id),
     leaveHelp: () => leaveHelp($, id),
     setFilter: (filter, label) => setFilter($, filter, label),
+    setLabelFilter: (change, label) => setLabelFilter($, change, label),
     openIssue: (pane, n) => openIssue($, pane, n),
     followIssue: n => followIssue($, id, n),
     goBack: () => goBack($, id),
@@ -980,6 +998,7 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
     version: built.version,
     repository: built.repository,
     requests: configDebug ? await read($, requests) : null,
+    repoName: r ? slug(r) : '',
   }
   const f = await frame($, p)
   const open = issueOf(p.place)
@@ -988,7 +1007,7 @@ async function renderPane($: EngineInterface, e: RenderInput<'Pane'>) {
   if (s.kind === 'ready' && r && compact === 'ask') return compactChoice($, p, f)
   if (s.kind === 'ready' && r && open !== null) return issueView($, p, f, r, open)
   if (id === MILESTONES_PANE && s.kind === 'ready' && r) return milestonesView($, p, f, s, r)
-  if (id === EPICS_PANE && s.kind === 'ready' && r) return epicsView($, p, f, r)
+  if (id === ISSUES_PANE && s.kind === 'ready' && r) return issuesView($, p, f, r)
   if (s.kind === 'ready' && r && m.kind !== 'idle' && m.kind !== 'error') return nextView(p, f, m, r)
   return setupView($, p, f, configure)
 }
@@ -1005,24 +1024,27 @@ async function runNext($: EngineInterface, name: string, word: string) {
     await $.ui.open({ id: PANE, title })
     await update($, panesOpen, ids => (ids.includes(PANE) ? ids : [...ids, PANE]))
   }
-  // The milestone filter starts where you work again: a choice holds until /next.
+  // The milestone filter starts where you work again, and the label filter
+  // on no labels: a choice holds until /next.
   await update($, filterChosen, () => null)
-  // The load opens no pane of its own: the Epics and Milestones tabs come
+  await update($, labelFilter, (): LabelFilter => NO_LABELS)
+  // The load opens no pane of its own: the Issues and Milestones tabs come
   // below, after What's next.
   await openNext("What's Next")
   const r = await refresh($, false)
   const s = await read($, setup)
-  const ep = await read($, epics)
-  const hasEpics = ep.kind === 'ok' && ep.openEpics > 0
+  const shown = await read($, issues)
+  const hasIssues = shown.kind === 'ok' && shown.openIssues > 0
   if (r) await openNext("What's next")
-  // The Epics pane, a tab next to What's next, only while there are open epics.
-  if (hasEpics) {
-    await $.ui.open({ id: EPICS_PANE, title: 'Epics' })
-    await update($, panesOpen, ids => (ids.includes(EPICS_PANE) ? ids : [...ids, EPICS_PANE]))
-  } else if (ep.kind === 'ok' && (await read($, panesOpen)).includes(EPICS_PANE)) {
-    await $.ui.close({ id: EPICS_PANE })
+  // The Issues pane, a tab next to What's next, only while there are open
+  // issues (#99, decided 4).
+  if (hasIssues) {
+    await $.ui.open({ id: ISSUES_PANE, title: 'Issues' })
+    await update($, panesOpen, ids => (ids.includes(ISSUES_PANE) ? ids : [...ids, ISSUES_PANE]))
+  } else if (shown.kind === 'ok' && (await read($, panesOpen)).includes(ISSUES_PANE)) {
+    await $.ui.close({ id: ISSUES_PANE })
   }
-  // The Milestones pane, a tab after Epics, only while there are open
+  // The Milestones pane, a tab after Issues, only while there are open
   // milestones; one the person closed opens again.
   const ms = await read($, milestones)
   const open = await read($, panesOpen)
@@ -1093,7 +1115,7 @@ export const register: Register = (on, options) => {
   on('classic.SessionStart', async ($, e, next) => {
     const done = await next(e)
     if (e.source !== 'clear') return done
-    const ours = (await $.ui.panes().catch(() => [])).map(p => p.id).filter(id => id === PANE || id === EPICS_PANE || id === MILESTONES_PANE)
+    const ours = (await $.ui.panes().catch(() => [])).map(p => p.id).filter(id => id === PANE || id === ISSUES_PANE || id === MILESTONES_PANE)
     if (ours.length > 0) {
       await update($, panesOpen, () => ours)
       await counted($, 'clear', () => refresh($))
@@ -1111,13 +1133,13 @@ export const register: Register = (on, options) => {
 
   on('config.set', settingChanged)
   on('ui.close', { id: PANE }, paneClosed)
-  on('ui.close', { id: EPICS_PANE }, paneClosed)
+  on('ui.close', { id: ISSUES_PANE }, paneClosed)
   on('ui.close', { id: MILESTONES_PANE }, paneClosed)
-  for (const requestId of [PANE, EPICS_PANE, MILESTONES_PANE]) {
+  for (const requestId of [PANE, ISSUES_PANE, MILESTONES_PANE]) {
     on('ui.scroll', { requestId }, scrollDetail)
     on('ui.focus', { requestId }, focusMoved)
   }
   on('ui.render', { component: 'Pane', requestId: PANE }, renderPane)
-  on('ui.render', { component: 'Pane', requestId: EPICS_PANE }, renderPane)
+  on('ui.render', { component: 'Pane', requestId: ISSUES_PANE }, renderPane)
   on('ui.render', { component: 'Pane', requestId: MILESTONES_PANE }, renderPane)
 }

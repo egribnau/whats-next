@@ -529,7 +529,7 @@ test("github.com: What's next shows your issue and the free ones, pull requests 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   const all = await texts(ui)
 
-  expect(all[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
   expect(all).toContain(rule('In progress · 1'))
   expect(all).toContain('● #12 Issue 12')
   // You work in v1.2, where #12 is yours: Next is taken from there.
@@ -769,7 +769,7 @@ test('github.com: an issue whose blockers are all closed is pickable, with no re
   expect(asked?.some(a => a.url.includes('/dependencies/'))).toBe(false)
 })
 
-// Epics
+// Issues
 
 const epicIssue = (number: number, title: string, state = 'open', labels = ['Epic'], due?: typeof V12) => ({
   ...issue(number, '2026-08-01T09:00:00Z', { title, labels, milestone: due }),
@@ -843,7 +843,7 @@ test('children: sub-issues of this repo, closed, and blocked asked only where Gi
   expect(await github(fakeSend(() => NOT_FOUND), R, 't', null).children(20)).toBeNull()
 })
 
-const EPICS_PANE = { ...PANE, requestId: 'next-epics', props: { ...PANE.props, title: 'Epics' } } as const
+const ISSUES_PANE = { ...PANE, requestId: 'next-issues', props: { ...PANE.props, title: 'Issues' } } as const
 
 test('children: each with its own sub-issue count, where GitHub gives one', async () => {
   const route = (u: URL): Reply =>
@@ -870,7 +870,7 @@ test('github.com: sub-issues with sub-issues of their own fold in the tree, labe
   })
   await clock.set(NOW)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   const subsAsked = () => asked?.filter(a => a.url.includes('/sub_issues')).map(a => new URL(a.url).pathname.split('/')[5])
   await ui.press({ key: 'fold-20' })
   // #14 has no Epic label: its count comes with it, nothing more is asked.
@@ -885,7 +885,7 @@ test('github.com: sub-issues with sub-issues of their own fold in the tree, labe
 })
 
 // #88: a children request that fails leaves that row's children unknown, as
-// in Epics and in a milestone; the rest of the tree is as it is.
+// in Issues and in a milestone; the rest of the tree is as it is.
 test('github.com: a sub-issue whose sub-issues GitHub would not list unfolds on children unknown', GH, async ($, on) => {
   const clock = world(on, {
     mine: [MINE],
@@ -897,7 +897,7 @@ test('github.com: a sub-issue whose sub-issues GitHub would not list unfolds on 
   })
   await clock.set(NOW)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await ui.press({ key: 'fold-20' })
   await ui.press({ key: 'fold-14' })
   const all = await texts(ui)
@@ -918,7 +918,7 @@ test('github.com: a sub-issue of yours with sub-issues of its own folds with a g
   })
   await clock.set(NOW)
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await ui.press({ key: 'fold-20' })
   expect(await ui.find({ key: 'fold-14' })).not.toBeNull()
   const found = (await ui.findAll({ type: 'Text' })) as unknown as { text: string; props: Record<string, unknown> }[]
@@ -927,7 +927,7 @@ test('github.com: a sub-issue of yours with sub-issues of its own folds with a g
   expect(found.filter(t => t.text === '⊕ ').map(t => t.props.color)).toEqual(['success'])
 })
 
-test('github.com: an epic with its sub-issues in the Epics pane, with the bar and the tallies', GH, async ($, on) => {
+test('github.com: an epic with its sub-issues in the Issues pane, with the bar and the tallies', GH, async ($, on) => {
   const asked: World['asked'] = []
   const clock = world(on, {
     mine: [MINE],
@@ -949,7 +949,7 @@ test('github.com: an epic with its sub-issues in the Epics pane, with the bar an
   await clock.set(NOW)
 
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   let all = await texts(ui)
   expect(all.some(t => t.includes('Radar sweep') && t.includes('1/5'))).toBe(true)
   for (const want of ['● 1', '○ 1', '◌ 1', '⊘ 1']) expect(all).toContain(want)

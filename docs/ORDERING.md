@@ -50,7 +50,7 @@ Per milestone filter setting, the issue you work from is:
    below.
 
 Where you work is that issue's epic, else its milestone. The milestone filter: a milestone,
-None or All. Set the filter to v1.3 and Next follows on from what you
+No milestone or All. Set the filter to v1.3 and Next follows on from what you
 did in v1.3, not elsewhere; All follows on from what you did anywhere.
 
 A close counts from anywhere: the pane, the browser, a `closes #41`
@@ -122,7 +122,7 @@ On `/next` the milestone filter starts where you work:
 2. with none, the milestone of the last issue you closed in the repo;
 3. with neither, the open milestone due first, as before #57.
 
-That issue without a milestone starts it on None. When an open issue of
+That issue without a milestone starts it on No milestone. When an open issue of
 yours or an available one is due soon and not in that milestone, it
 starts on All instead, so an issue due soon is in front when you open
 the pane (#70). A milestone you
@@ -137,16 +137,23 @@ Asked the first time the milestone filter is set to something, then remembered u
 | your last closed issue in the milestone filter | 1 | the first page of the repo's closed issues assigned to you, in that milestone; the latest closed of it | the first page, newest change first; the latest closed of it | the same, pull requests left out |
 | the epic of the issue you work from | 1 | the open epics that depend on it (`/blocks`) | its related links to an open issue with the Epic label | its parent issue, open, in this repo |
 | the epic of your last closed issue, when you work from an issue in progress | 1 | the same | the same | the same |
-| the epic's children | 1, or none when Epics already loaded them | its dependencies | its related links | its sub-issues |
+| the epic's children | 1, or none when Issues already loaded them | its dependencies | its related links | its sub-issues |
 | each parent epic up the tree | 2 each (its parent, its children) | | | GitHub only |
-| the children of each open epic due soon, for the due date that counts | 1 each, or none when Epics or the scopes already loaded them | its dependencies | its related links | none: a parent issue has no due date |
+| the children of each open epic due soon, for the due date that counts | 1 each, or none when Issues or the scopes already loaded them | its dependencies | its related links | none: a parent issue has no due date |
 
-All asks without a milestone; None asks for issues without one
+All asks without a milestone; No milestone asks for issues without one
 (Forgejo cannot filter that: its list is filtered here). The All answer is
 also the answer for its own milestone, which is then not asked. Where the
 milestone filter starts uses the All request, asked first, so it costs
 nothing more. On Forgejo with dependencies off, an epic has no children:
 nothing is asked for the epic. Debug counts these with the rest.
+
+Issues marks every issue it lists by how it stands for you, so each load
+also asks what each open issue in the milestone filter waits on, yours
+left out: one request each (Forgejo its dependencies, GitLab its
+`is_blocked_by` links, GitHub its blocked-by dependencies, none where its
+list says it has none). Each answer is remembered until Refresh and shared
+with What's next and Milestones, so none is asked twice (#99).
 
 How many open issues wait on an issue costs nothing: GitHub's list says
 it; on Forgejo and GitLab it is counted from the blocker checks the walk

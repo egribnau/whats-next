@@ -173,7 +173,8 @@ export type Page =
   | { kind: 'milestone'; title: string }
   | { kind: 'issue'; number: number; trail: number[]; folds: DetailFolds; milestone: string | null }
 // `labels`: whether the issue detail's labels list is open, and how far
-// it is scrolled, in rows (DRAWING-issue.md, The labels list); `milestones`
+// it is scrolled, in rows (DRAWING-issue.md, The labels list); on a list,
+// the label filter's list; `milestones`
 // the same of its milestone list (DRAWING-issue.md, The milestone list),
 // `parents` of its epic list (DRAWING-issue.md, The epic list).
 export type Where = {
@@ -265,18 +266,18 @@ export type Epic = {
   blockedBy?: number[]
 }
 
-// The epics of one milestone, or of none (`title` null), with the
-// milestone's due date and how many of its issues are closed.
-export type EpicGroup = { title: string | null; due: string | null; closed: number; total: number; epics: Epic[] }
+// The open issues of one milestone, or of none (`title` null), as Issues
+// groups them, with the milestone's due date and how many of its issues are
+// closed: its open issues, each open epic carrying its children, then its
+// closed epics.
+export type IssueGroup = { title: string | null; due: string | null; closed: number; total: number; issues: MilestoneIssue[] }
 
-// The Epics pane: the groups the milestone filter shows, and how many open
-// epics the repo has in all, which decides whether the pane opens.
-export type Epics =
+// The Issues pane: the groups the milestone filter shows, and how many open
+// issues the repo has in all, which decides whether the pane opens.
+export type Issues =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  // `held`: the open epics in the milestone filter shown under a parent epic, not at the
-  // top of a group.
-  | { kind: 'ok'; groups: EpicGroup[]; openEpics: number; held: Epic[] }
+  | { kind: 'ok'; groups: IssueGroup[]; openIssues: number }
   | { kind: 'error'; message: string }
 
 // A milestone as the Milestones pane shows it: its due date and how many of
@@ -295,6 +296,13 @@ export type Milestone = {
   id?: number
   group?: string
 }
+
+// What the label filter is set to: the labels What's next and Issues show,
+// and whether an issue needs all of them (`and`) or one (`or`); no labels
+// shows every issue (All). `none`: only the issues without a label (None)
+// (docs/TERMINOLOGY.md, label filter).
+// `not`: the labels left out, whose issues go under and and or alike (#99, decided 7).
+export type LabelFilter = { labels: string[]; mode: 'and' | 'or'; none?: boolean; not?: string[] }
 
 // What the milestone filter is set to: one milestone, None (the issues
 // without one) or All. hooks/filter.ts says what each means.
@@ -320,7 +328,7 @@ declare module 'claude-code' {
       parentChoices: StateFamily<ParentChoices>
       // The frame of the spinner a list waiting on the forge turns, counted up.
       spinner: number
-      epics: Epics
+      issues: Issues
       // What's Next's panes that are open, by id: with more than one the engine draws
       // tabs naming them, so the title rows leave the names out.
       panesOpen: string[]
@@ -331,6 +339,9 @@ declare module 'claude-code' {
       filterShown: FilterShown | null
       // Whether the milestone filter's list is open.
       filterOpen: boolean
+      // What the label filter is set to; no labels until the person sets one,
+      // again on each /next.
+      labelFilter: LabelFilter
       // The repo's labels, for the issue detail's labels list.
       repoLabels: RepoLabels
       // Whether the milestone list moves an issue's open children in its
@@ -339,7 +350,7 @@ declare module 'claude-code' {
       // With Debug on: the last action, the requests it sent the forge, and
       // the requests of the session so far.
       requests: { label: string; count: number; total: number } | null
-      // The issues folded open in a tree, Epics and Milestones alike, by number.
+      // The issues folded open in a tree, Issues and Milestones alike, by number.
       unfolded: number[]
       // The children loaded of any issue in a tree, by number: null when the
       // forge would not say.

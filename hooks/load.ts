@@ -1,6 +1,6 @@
-import type { Child, DueBy, Epic, EpicGroup, Features, IssueDetail, IssueRow, LastClosed, MilestoneFilter, MilestoneIssue, Ref, Scope } from '../types'
-import { blockersCount, childOf, groupsFor, isMine, roots, stands, tree, type MilestoneRow } from './epics'
-import { ALL, filterKey, filterOptions, holds, ofMilestone, sameFilter, type FilterOption } from './filter'
+import type { Child, DueBy, Epic, Features, IssueDetail, IssueGroup, IssueRow, LabelFilter, LastClosed, MilestoneFilter, MilestoneIssue, Ref, Scope } from '../types'
+import { blockersCount, childOf, groupsFor, isMine, stands, tree, type MilestoneRow } from './epics'
+import { ALL, filterKey, filterOptions, holds, matches, NO_LABELS, ofMilestone, sameFilter, type FilterOption } from './filter'
 import { dueSoon } from './issue'
 import { order, pickNext, soonAt, type Scoped } from './next'
 import { message, type Closed, type EpicRow, type OpenIssue, type Tracker } from './tracker'
@@ -193,7 +193,7 @@ export async function loadRepo(t: Tracker, o: { me: string | null; features: Fea
 
   // The open epics issue `n` is a child of, asked once and remembered;
   // null when the forge would not say. Where children do not nest, an epic
-  // is no child: an epic that depends on it waits for it (README, Epics),
+  // is no child: an epic that depends on it waits for it (README),
   // and nothing is asked.
   async function parentsOf(n: number): Promise<number[] | null> {
     if (!t.nested && known.epics.some(e => e.number === n)) return []
@@ -265,29 +265,69 @@ export async function loadRepo(t: Tracker, o: { me: string | null; features: Fea
     return waits(children)
   }
 
-  // The epics within `filter`, by milestone, each open one with its
-  // children. An open epic not yours is asked what it waits on, as
-  // Milestones asks, its own children left out (DRAWING-issue.md, The facts
-  // line); dependencies off, nothing.
-  async function epicGroups(filter: MilestoneFilter): Promise<EpicGroup[]> {
-    const loadOne = async (i: EpicRow): Promise<Epic> => {
-      const { number, title, state, due } = i
-      const facts = { labels: i.labels ?? [], milestone: i.milestone, created: i.created ?? '' }
-      if (state === 'closed') return { number, title, state, due, children: null, ...facts }
-      const children = await kidsOf(number)
-      const mine = isMine(i.assignees ?? [], me)
-      const open = blockersCount(state, mine) ? await blockersOf(number) : null
-      const { blockedBy } = stands({ state, blockedBy: open ?? [] }, mine, (children ?? []).map(c => c.number))
-      return { number, title, state, due, children, ...facts, blockedBy }
+  // The open issues of milestone `title` (null: those without one), as epic
+  // children are: yours, free and with others, each not yours checked for
+  // blockers as What's next checks its own, by number. An open epic among
+  // them carries its children, shared with every tree, which never count as
+  // its blockers. `epicsToo`: the open epics the lists left out are taken
+  // from the epics' own list. Its closed epics come last. null when the
+  // issues could not be listed.
+  async function issuesIn(title: string | null, epicsToo = false): Promise<MilestoneIssue[] | null> {
+    if (!known.listed) return null
+    const listed = [
+      ...known.mine.map(i => ({ i, assignees: me !== null ? [me] : [], mine: true })),
+      ...known.free.map(i => ({ i, assignees: [] as string[], mine: false })),
+      ...known.taken.map(i => ({ i, assignees: i.assignees, mine: false })),
+    ]
+    const seen = new Set(listed.map(x => x.i.number))
+    const epicRows = epicsToo
+      ? known.epics
+          .filter(e => e.state === 'open' && !seen.has(e.number))
+          .map(e => {
+            const assignees = e.assignees ?? []
+            const i = { number: e.number, title: e.title, milestone: e.milestone, labels: e.labels ?? [], created: e.created ?? '', due: e.due }
+            return { i, assignees, mine: isMine(assignees, me) }
+          })
+      : []
+    const all = [...listed, ...epicRows].filter(x => x.i.milestone === title).sort((a, b) => a.i.number - b.i.number)
+    const out: MilestoneIssue[] = []
+    for (const { i, assignees, mine } of all) {
+      const epic = openEpics.has(i.number)
+      const children = epic ? await kidsOf(i.number) : undefined
+      const open = blockersCount('open', mine) ? await blockersOf(i.number) : null
+      const { blocked, blockedBy } = stands({ state: 'open', blockedBy: open ?? [] }, mine, (children ?? []).map(c => c.number))
+      out.push({
+        ...(epic ? { children } : {}),
+        number: i.number,
+        title: i.title,
+        state: 'open',
+        assignees,
+        mine,
+        blocked,
+        labels: i.labels,
+        milestone: i.milestone,
+        created: i.created,
+        due: i.due,
+        blockedBy,
+      })
     }
-    return Promise.all(
-      groupsFor(filter, known.milestones, known.epics).map(async g => {
-        const shown = await Promise.all(g.epics.map(loadOne))
-        shown.sort((a, b) => (a.state === 'closed' ? 1 : 0) - (b.state === 'closed' ? 1 : 0) || a.number - b.number)
-        const m = g.milestone
-        return { title: m?.title ?? null, due: m?.due ?? null, closed: m?.closed ?? 0, total: m?.total ?? 0, epics: shown }
-      }),
-    )
+    for (const e of known.epics.filter(e => e.state === 'closed' && e.milestone === title).sort((a, b) => a.number - b.number)) {
+      out.push({
+        number: e.number,
+        title: e.title,
+        state: 'closed',
+        assignees: [],
+        mine: false,
+        blocked: false,
+        labels: e.labels ?? [],
+        milestone: title,
+        created: '',
+        due: e.due,
+        blockedBy: [],
+        children: null,
+      })
+    }
+    return out
   }
 
   // Issue `p`, a parent, as the issue detail names it: its number, title
@@ -352,18 +392,18 @@ export async function loadRepo(t: Tracker, o: { me: string | null; features: Fea
     // is only limited; nor is one that would not say for an issue
     // (dependencies off without the setup check knowing, an error), until
     // the next Refresh.
-    async whatsNext(filter: MilestoneFilter, now = 0) {
+    async whatsNext(filter: MilestoneFilter, now = 0, labels: LabelFilter = NO_LABELS) {
       const dates = await dueDates(now)
       const dueOf = (i: IssueRow) => dates.get(i.number)?.due ?? null
       const soon = (i: IssueRow) => soonAt(dueOf(i), now)
       // Due soon first, earliest first; the rest as they were, oldest first.
       const inProgress = known.mine
-        .filter(i => holds(filter, i.milestone))
+        .filter(i => holds(filter, i.milestone) && matches(labels, i.labels))
         .map((i, k) => ({ i, k, at: soon(i) }))
         .sort((a, b) => a.at - b.at || a.k - b.k)
         .map(x => x.i)
-      const free = known.free.filter(i => holds(filter, i.milestone))
-      const dueOutside = known.free.filter(i => !holds(filter, i.milestone) && soon(i) < Infinity).length
+      const free = known.free.filter(i => holds(filter, i.milestone) && matches(labels, i.labels))
+      const dueOutside = known.free.filter(i => !holds(filter, i.milestone) && matches(labels, i.labels) && soon(i) < Infinity).length
       const last = await lastClosedIn(filter)
       const from = latestFirst(inProgress)[0] ?? last
       const chain = from ? await epicsAbove(from.number) : []
@@ -403,74 +443,28 @@ export async function loadRepo(t: Tracker, o: { me: string | null; features: Fea
       return { inProgress, next, queue, blocked, more, scopes: scopeOf, unblocks, dueBy, dueOutside, lastClosed }
     },
 
-    // The Epics pane as a tree: the groups of `filter` with only the epics
-    // at the top of the tree in them, and the open epics shown under a
-    // parent epic instead (`held`). An epic whose children the forge would
-    // not say has them unknown; the rest draw as they are.
-    async epics(filter: MilestoneFilter): Promise<{ groups: EpicGroup[]; held: Epic[] }> {
-      const all = await epicGroups(filter)
-      const open = all.flatMap(g => g.epics).filter(e => e.state === 'open')
-      const top = roots(open)
-      const groups = all
-        .map(g => ({ ...g, epics: g.epics.filter(e => e.state === 'closed' || top.has(e.number)) }))
-        .filter(g => g.epics.length > 0)
-      return { groups, held: open.filter(e => !top.has(e.number)) }
+    // How many open issues the repo has, epics among them, which decides
+    // whether Issues opens.
+    openIssues: () => new Set([...known.mine, ...known.free, ...known.taken].map(i => i.number).concat([...openEpics])).size,
+
+    // The Issues pane: the groups of `filter`, by milestone, each with its
+    // open issues and closed epics as `issuesIn` lists them. null when the
+    // issues could not be listed.
+    async issues(filter: MilestoneFilter): Promise<IssueGroup[] | null> {
+      if (!known.listed) return null
+      const items = [...known.mine, ...known.free, ...known.taken, ...known.epics]
+      const groups: IssueGroup[] = []
+      for (const g of groupsFor(filter, known.milestones, items)) {
+        const m = g.milestone
+        const issues = (await issuesIn(m?.title ?? null, true)) ?? []
+        groups.push({ title: m?.title ?? null, due: m?.due ?? null, closed: m?.closed ?? 0, total: m?.total ?? 0, issues })
+      }
+      return groups
     },
 
-    // The open issues of milestone `title`, as epic children are: yours,
-    // free and with others, each not yours checked for blockers as What's
-    // next checks its own, by number. An open epic among them carries its
-    // children, shared with Epics, which never count as its blockers. Its
-    // closed epics come last, for a closed milestone to show. null when the
-    // issues could not be listed.
-    async milestone(title: string): Promise<MilestoneIssue[] | null> {
-      if (!known.listed) return null
-      const all = [
-        ...known.mine.map(i => ({ i, assignees: me !== null ? [me] : [], mine: true })),
-        ...known.free.map(i => ({ i, assignees: [] as string[], mine: false })),
-        ...known.taken.map(i => ({ i, assignees: i.assignees, mine: false })),
-      ]
-        .filter(x => x.i.milestone === title)
-        .sort((a, b) => a.i.number - b.i.number)
-      const out: MilestoneIssue[] = []
-      for (const { i, assignees, mine } of all) {
-        const epic = openEpics.has(i.number)
-        const children = epic ? await kidsOf(i.number) : undefined
-        const open = blockersCount('open', mine) ? await blockersOf(i.number) : null
-        const { blocked, blockedBy } = stands({ state: 'open', blockedBy: open ?? [] }, mine, (children ?? []).map(c => c.number))
-        out.push({
-          ...(epic ? { children } : {}),
-          number: i.number,
-          title: i.title,
-          state: 'open',
-          assignees,
-          mine,
-          blocked,
-          labels: i.labels,
-          milestone: i.milestone,
-          created: i.created,
-          due: i.due,
-          blockedBy,
-        })
-      }
-      for (const e of known.epics.filter(e => e.state === 'closed' && e.milestone === title).sort((a, b) => a.number - b.number)) {
-        out.push({
-          number: e.number,
-          title: e.title,
-          state: 'closed',
-          assignees: [],
-          mine: false,
-          blocked: false,
-          labels: [],
-          milestone: title,
-          created: '',
-          due: e.due,
-          blockedBy: [],
-          children: null,
-        })
-      }
-      return out
-    },
+    // The open issues of milestone `title`, for the Milestones pane: its
+    // closed epics come last, for a closed milestone to show.
+    milestone: (title: string) => issuesIn(title),
 
     // What there is for you in milestone `title`, from what is known without
     // asking the tracker: yours from the lists; available, with others and
@@ -495,7 +489,7 @@ export async function loadRepo(t: Tracker, o: { me: string | null; features: Fea
 
     // Asks for the children each tree needs, as far as `unfolded` reaches,
     // each issue once. `trees`: the epics at the top of each tree a pane
-    // draws (the Epics pane, a milestone). Returns every child list loaded
+    // draws (the Issues pane, a milestone). Returns every child list loaded
     // so far, by issue.
     async grow(trees: readonly (readonly Epic[])[], unfolded: ReadonlySet<number>): Promise<Record<number, Child[] | null>> {
       const kids = (n: number) => (known.children.has(n) ? (known.children.get(n) ?? null) : undefined)
@@ -514,10 +508,10 @@ export async function loadRepo(t: Tracker, o: { me: string | null; features: Fea
     // The issues `n` is a child of, as the issue detail names them: each
     // one's number, title and state, whether it is an epic, and what its
     // mark needs: whom it is assigned to and whether it is blocked. In the
-    // epic list's order, the Epics pane's; one not among the open issues and
+    // epic list's order, the Issues pane's; one not among the open issues and
     // epics known is left out; none when the forge would not say.
     async parents(n: number): Promise<(Ref & { epic: boolean })[]> {
-      const listed = groupsFor(ALL, known.milestones, known.epics.filter(e => e.state === 'open')).flatMap(g => g.epics.map(e => e.number))
+      const listed = groupsFor(ALL, known.milestones, known.epics.filter(e => e.state === 'open')).flatMap(g => g.issues.map(e => e.number))
       const at = (x: number) => (listed.includes(x) ? listed.indexOf(x) : listed.length)
       const found = await Promise.all([...((await parentsOf(n)) ?? [])].sort((a, b) => at(a) - at(b)).map(refOf))
       return found.filter(r => r !== null)
@@ -529,14 +523,14 @@ export async function loadRepo(t: Tracker, o: { me: string | null; features: Fea
     },
 
     // What issue `n` may be put under, as the epic list offers it
-    // (DRAWING-issue.md, The epic list): the open epics in the Epics pane's
+    // (DRAWING-issue.md, The epic list): the open epics in the Issues pane's
     // order, and where children nest (GitHub) the open issues of its
     // milestone `m` that are no epic; issue `n` and its `children` left out,
     // so there is no loop.
     async choices(n: number, m: string | null, children: readonly number[]) {
       const skip = new Set([n, ...children])
       const epics = groupsFor(ALL, known.milestones, known.epics.filter(e => e.state === 'open' && !skip.has(e.number))).flatMap(g =>
-        g.epics.map(e => e.number),
+        g.issues.map(e => e.number),
       )
       const issues =
         t.nested && m !== null

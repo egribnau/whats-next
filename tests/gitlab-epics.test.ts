@@ -615,10 +615,10 @@ const PANE = {
   },
 } as const
 
-const EPICS_PANE = {
+const ISSUES_PANE = {
   ...PANE,
-  requestId: 'next-epics',
-  props: { ...PANE.props, title: 'Epics', bodyColumns: 50 },
+  requestId: 'next-issues',
+  props: { ...PANE.props, title: 'Issues', bodyColumns: 50 },
 } as const
 
 const RUN = {
@@ -730,18 +730,18 @@ const ERROR = /could not|HTTP \d|error|unknown|failed/i
 
 async function panes($: Engine) {
   await $.command.run(RUN)
-  const epics = (await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })) as Ui
+  const epics = (await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })) as Ui
   const next = (await $.ui.mount({ ...PANE, surface: 'terminal' })) as Ui
   return { epics, next }
 }
 
-test('GitLab Free: the Epics pane shows the epic in its milestone, x/y closed, its bar and its children', GL, async ($, on) => {
+test('GitLab Free: the Issues pane shows the epic in its milestone, x/y closed, its bar and its children', GL, async ($, on) => {
   const opened: Opened[] = []
   const clock = paneWorld(on, false, [], opened)
   await clock.set(NOW)
   const { epics } = await panes($)
 
-  expect(opened.some(p => p.id === 'next-epics')).toBe(true)
+  expect(opened.some(p => p.id === 'next-issues')).toBe(true)
   let all = await texts(epics)
   expect(all.slice(0, 7)).toEqual(['── v1.2 · ⧗ 31 Oct · 2/7 closed '.padEnd(50, '─'), '── ', 'v1.2', ' · ', '⧗ 31 Oct', ' · ', '2/7 closed'])
   // One of its four children is closed.
@@ -794,7 +794,7 @@ test("GitLab EE: an issue blocked by an is_blocked_by link waits in What's next"
   expect(linkPaths(asked)).toContain('/api/v4/projects/boats%2Fradar/issues/33/links')
 })
 
-test('GitLab EE: the blocked child shows blocked in Epics', GL, async ($, on) => {
+test('GitLab EE: the blocked child shows blocked in Issues', GL, async ($, on) => {
   const clock = paneWorld(on, true)
   await clock.set(NOW)
   const { epics } = await panes($)

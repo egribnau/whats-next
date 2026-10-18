@@ -274,12 +274,11 @@ test('folded, line 2 shows only what is known: yours from the lists, the rest no
   const before = asked.length
   const pane = await $.ui.mount({ ...MILESTONES_PANE, surface: 'terminal' })
   const t = await texts(pane)
-  // GitHub: What's next checked #33 and #40, not jdoe's #36, so only yours.
-  expect(t).toContain('  ⧗ 13 Oct · ● 1')
-  expect(t.some(x => /[○◌⊘] \d/.test(x))).toBe(false)
-  // Jira: jdoe's #50 alone, never checked: its due date alone.
+  // GitHub, the milestone filter: Issues checked jdoe's #36 too, so all of it.
+  expect(t).toContain('  ⧗ 13 Oct · ● 1 · ○ 1 · ◌ 1 · ⊘ 1')
+  // Jira: jdoe's #50 alone, outside the filter, never checked: its due date alone.
   expect(t).toContain('  ⧗ 30 Nov')
-  expect(t.filter(x => /^ {2}⧗ .* · /.test(x))).toEqual(['  ⧗ 13 Oct · ● 1'])
+  expect(t.filter(x => /^ {2}⧗ .* · /.test(x))).toEqual(['  ⧗ 13 Oct · ● 1 · ○ 1 · ◌ 1 · ⊘ 1'])
   expect(asked.length).toBe(before)
 })
 
@@ -395,12 +394,13 @@ test('once unfolded, line 2 under a milestone says all there is for you', TOKEN,
   await clock.set(NOW)
   await $.command.run(RUN)
   const pane = await $.ui.mount({ ...MILESTONES_PANE, surface: 'terminal' })
-  expect(await texts(pane)).not.toContain('  ⧗ 13 Oct · ● 1 · ○ 1 · ◌ 1 · ⊘ 1')
-  await pane.press({ key: 'ms-fold-GitHub' })
-  await pane.press({ key: 'ms-fold-GitHub' })
+  // Jira is outside the milestone filter: Issues checked none of it.
+  expect(await texts(pane)).not.toContain('  ⧗ 30 Nov · ◌ 1')
+  await pane.press({ key: 'ms-fold-Jira' })
+  await pane.press({ key: 'ms-fold-Jira' })
   const t = await texts(pane)
-  const at = t.indexOf('  ⧗ 13 Oct · ● 1 · ○ 1 · ◌ 1 · ⊘ 1')
-  expect(t.slice(at + 1, at + 10)).toEqual(['⧗ 13 Oct', ' · ', '● 1', ' · ', '○ 1', ' · ', '◌ 1', ' · ', '⊘ 1'])
+  const at = t.indexOf('  ⧗ 30 Nov · ◌ 1')
+  expect(t.slice(at + 1, at + 4)).toEqual(['⧗ 30 Nov', ' · ', '◌ 1'])
 })
 
 test('a row opens Issue detail, and Back returns to Milestones', TOKEN, async ($, on) => {
@@ -422,15 +422,17 @@ test("a milestone's issues are checked for blockers once, when it is first unfol
   await clock.set(NOW)
   await $.command.run(RUN)
   const pane = await $.ui.mount({ ...MILESTONES_PANE, surface: 'terminal' })
-  // Folded, jdoe's issues are asked nothing.
-  expect(DEPS(asked).some(u => /\/issues\/(36|50)\//.test(u))).toBe(false)
+  // Folded, Jira's jdoe's #50, outside the milestone filter, is asked nothing.
+  expect(DEPS(asked).some(u => u.includes('/issues/50/'))).toBe(false)
+  await pane.press({ key: 'ms-fold-Jira' })
+  expect(DEPS(asked).filter(u => u.includes('/issues/50/'))).toHaveLength(1)
+  const before = asked.length
+  await pane.press({ key: 'ms-fold-Jira' })
+  await pane.press({ key: 'ms-fold-Jira' })
+  expect(asked.length).toBe(before)
+  // GitHub's #36, checked once by Issues, is not asked again.
   await pane.press({ key: 'ms-fold-GitHub' })
   expect(DEPS(asked).filter(u => u.includes('/issues/36/'))).toHaveLength(1)
-  const before = asked.length
-  await pane.press({ key: 'ms-fold-GitHub' })
-  await pane.press({ key: 'ms-fold-GitHub' })
-  expect(asked.length).toBe(before)
-  expect(DEPS(asked).some(u => u.includes('/issues/50/'))).toBe(false)
 })
 
 test('folds hold over Refresh, which asks again only for unfolded milestones', TOKEN, async ($, on) => {
@@ -492,7 +494,7 @@ test('epics in a milestone come first, folded, with their bar and what there is 
 })
 
 // #88: a children request that fails leaves that epic's children unknown,
-// as in Epics and under a row; the milestone's issues still show.
+// as in Issues and under a row; the milestone's issues still show.
 test("an epic in a milestone whose children the forge would not say has them unknown, folded and unfolded", TOKEN, async ($, on) => {
   const clock = world(on, { ...EPIC_WORK, failDeps: [29] })
   await clock.set(NOW)
@@ -534,11 +536,11 @@ test('an epic in a milestone unfolds on its tree, its mark first so Tab stops on
   await backToMilestones(pane)
 })
 
-test('what is unfolded is shared with Epics, and holds over Refresh and Back', TOKEN, async ($, on) => {
+test('what is unfolded is shared with Issues, and holds over Refresh and Back', TOKEN, async ($, on) => {
   const clock = world(on, EPIC_WORK)
   await clock.set(NOW)
   await $.command.run(RUN)
-  const epics = await $.ui.mount({ ...MILESTONES_PANE, requestId: 'next-epics', surface: 'terminal' })
+  const epics = await $.ui.mount({ ...MILESTONES_PANE, requestId: 'next-issues', surface: 'terminal' })
   await epics.press({ key: 'fold-29' })
   const pane = await $.ui.mount({ ...MILESTONES_PANE, surface: 'terminal' })
   await pane.press({ key: 'ms-fold-GitHub' })
@@ -626,12 +628,12 @@ test("an epic is not blocked by its own children, and opens its detail", TOKEN, 
   await backToMilestones(pane)
 })
 
-test("an epic's children are asked once, for Milestones and Epics both", TOKEN, async ($, on) => {
+test("an epic's children are asked once, for Milestones and Issues both", TOKEN, async ($, on) => {
   const asked: string[] = []
   const clock = world(on, EPIC_WORK, asked)
   await clock.set(NOW)
   await $.command.run(RUN)
-  // The load asked for them already, for Epics, which starts on GitHub.
+  // The load asked for them already, for Issues, which starts on GitHub.
   const before = asked.filter(u => u.endsWith('/issues/29/dependencies')).length
   expect(before).toBeGreaterThan(0)
   const pane = await $.ui.mount({ ...MILESTONES_PANE, surface: 'terminal' })

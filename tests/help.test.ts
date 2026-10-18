@@ -23,7 +23,7 @@ const PANE = {
     view: {},
   },
 } as const
-const EPICS_PANE = { ...PANE, requestId: 'next-epics', props: { ...PANE.props, title: 'Epics' } } as const
+const ISSUES_PANE = { ...PANE, requestId: 'next-issues', props: { ...PANE.props, title: 'Issues' } } as const
 const MILESTONES_PANE = { ...PANE, requestId: 'next-milestones', props: { ...PANE.props, title: 'Milestones' } } as const
 
 const run = (args = '') =>
@@ -103,14 +103,14 @@ const texts = async (ui: Ui) => (await ui.findAll({ type: 'Text' })).map(t => t.
 const has = (all: string[], want: string) => all.some(t => t.includes(want))
 const shown = async (ui: Ui) => (await ui.find({ key: 'help-rule-0' })) !== undefined
 
-async function mounted($: Engine, pane: typeof PANE | typeof EPICS_PANE | typeof MILESTONES_PANE = PANE, columns = 60) {
+async function mounted($: Engine, pane: typeof PANE | typeof ISSUES_PANE | typeof MILESTONES_PANE = PANE, columns = 60) {
   await $.command.run(run())
   return $.ui.mount({ ...pane, props: { ...pane.props, bodyColumns: columns }, surface: 'terminal' })
 }
 
 test('Help is the last line of the menu in every pane, hotkey h, and opens the help page', TOKEN, async ($, on) => {
   world(on)
-  for (const pane of [PANE, EPICS_PANE, MILESTONES_PANE]) {
+  for (const pane of [PANE, ISSUES_PANE, MILESTONES_PANE]) {
     const ui = await mounted($, pane)
     await ui.press({ key: 'menu' })
     expect(await texts(ui)).toContain('Help            h')
@@ -132,7 +132,7 @@ test('Help is the last line of the menu in every pane, hotkey h, and opens the h
 test('the same page in every pane', TOKEN, async ($, on) => {
   world(on)
   const pages: string[][] = []
-  for (const pane of [PANE, EPICS_PANE, MILESTONES_PANE]) {
+  for (const pane of [PANE, ISSUES_PANE, MILESTONES_PANE]) {
     const ui = await mounted($, pane)
     await ui.press({ key: 'help' })
     pages.push(await texts(ui))

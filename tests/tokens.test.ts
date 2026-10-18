@@ -225,6 +225,36 @@ test('Labels: a label named after the token, and a refused add that echoes the r
   noToken([...said, refusal])
 })
 
+test('label filter: a refused labels list that echoes the request shows without the token', GH, async ($, on) => {
+  const said = world(on, {
+    answers: {
+      '/repos/boats/radar/labels': (url, h) => json(500, { message: echo(url, h) }),
+    },
+  })
+  const ui = await shown($)
+  await ui.press({ key: 'labels' })
+  const all = await texts(ui)
+  said.push(...all)
+  expect(all.some(t => t.startsWith('Could not load the labels'))).toBe(true)
+  noToken(said)
+})
+
+test('label filter: a label named after the token, in its list and on its button, shows without the token', GH, async ($, on) => {
+  const said = world(on, {
+    answers: {
+      '/repos/boats/radar/labels': () => json(200, [{ id: 1, name: `rotate-${TOKEN}`, color: 'd73a4a' }]),
+    },
+  })
+  const ui = await shown($)
+  await ui.press({ key: 'labels' })
+  said.push(...(await texts(ui)))
+  await ui.press({ key: 'toggle-label-0' })
+  const all = await texts(ui)
+  said.push(...all)
+  expect(all).toContain('rotate-<token>')
+  noToken(said)
+})
+
 test('Milestone: a milestone named after the token, and a refused move that echoes the request, show without the token', GH, async ($, on) => {
   const m = { number: 3, title: `rotate-${TOKEN}`, description: '', html_url: 'https://github.com/boats/radar/milestone/3', due_on: null, open_issues: 0, closed_issues: 0, state: 'open' }
   const said = world(on, {
@@ -422,7 +452,7 @@ test('Prompt: the prompt it drafts, its toast and the Debug counter carry no tok
   noToken(said)
 })
 
-test('Epics: a sub-issue unfolded in the tree, and the Debug counter after, carry no token', GH, async ($, on) => {
+test('Issues: a sub-issue unfolded in the tree, and the Debug counter after, carry no token', GH, async ($, on) => {
   const epic = { ...issue(20, 'Radar sweep'), labels: [{ name: 'epic', color: '' }] }
   const said = world(on, {
     answers: {
@@ -433,7 +463,7 @@ test('Epics: a sub-issue unfolded in the tree, and the Debug counter after, carr
     },
   })
   await $.command.run(RUN)
-  const ui = (await $.ui.mount({ ...PANE, requestId: 'next-epics', surface: 'terminal' })) as Ui
+  const ui = (await $.ui.mount({ ...PANE, requestId: 'next-issues', surface: 'terminal' })) as Ui
   await ui.press({ key: 'fold-20' })
   await ui.press({ key: 'fold-14' })
   said.push(...(await texts(ui)))

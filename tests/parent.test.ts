@@ -49,7 +49,7 @@ type World = {
 }
 
 // Forgejo with #29, and the open epics #40 in v1.2, #12 in v1.1 and #8
-// without a milestone: the list shows them in the Epics pane's order, #12,
+// without a milestone: the list shows them in the Issues pane's order, #12,
 // #40, #8.
 function world(on: On, w: World) {
   const clock = mock.clock(on)
@@ -152,7 +152,7 @@ async function choices(ui: Ui) {
   return (await texts(ui)).filter(t => /^(☑|☐) /.test(t) || t.trimEnd() === 'No epic').map(t => t.replace(/\s+/g, ' ').trim())
 }
 
-test('the Epic line opens the epic list: No epic first, then the open epics in the Epics order, the ones it is under ticked', TOKEN, async ($, on) => {
+test('the Epic line opens the epic list: No epic first, then the open epics in the Issues order, the ones it is under ticked', TOKEN, async ($, on) => {
   const sent: Sent[] = []
   world(on, { sent })
   const ui = await opened($)

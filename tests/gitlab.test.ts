@@ -1010,7 +1010,7 @@ test("gitlab.com: What's next shows your issue and the free ones by iid", GL, as
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   const all = await texts(ui)
 
-  expect(all[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
   expect(all).toContain(rule('In progress · 1'))
   expect(all).toContain('● #12 Issue 12')
   // You work in v1.2, where #12 is yours: Next is taken from there.
@@ -1087,9 +1087,9 @@ test('gitlab.com refusing the token: says GitLab did not accept it', GL, async (
   expect(all).toContain('1. Create a token at https://gitlab.com/-/user_settings/personal_access_tokens with api, or read_api for read only.')
 })
 
-const EPICS_PANE = { ...PANE, requestId: 'next-epics', props: { ...PANE.props, title: 'Epics' } } as const
+const ISSUES_PANE = { ...PANE, requestId: 'next-issues', props: { ...PANE.props, title: 'Issues' } } as const
 
-test('gitlab.com Free: an epic with its related issues in the Epics pane, no blockers asked and no error', GL, async ($, on) => {
+test('gitlab.com Free: an epic with its related issues in the Issues pane, no blockers asked and no error', GL, async ($, on) => {
   const asked: World['asked'] = []
   const clock = world(on, {
     mine: [MINE],
@@ -1110,7 +1110,7 @@ test('gitlab.com Free: an epic with its related issues in the Epics pane, no blo
   await clock.set(NOW)
 
   await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...EPICS_PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...ISSUES_PANE, surface: 'terminal' })
   await ui.press({ key: 'fold-20' })
   const all = await texts(ui)
 

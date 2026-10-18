@@ -63,11 +63,11 @@ joins the table:
 
 | Where | Drawn as |
 |---|---|
-| Epics pane, an open epic | bar and `3/8` |
-| Epics pane, a closed epic | grey row, `✓` |
-| Epics pane, a milestone's rule | `· 9/17 closed` |
-| Epics pane, a child with children of its own | `1/3`, no bar |
-| Epics pane, under an unfolded epic or child | `✓ 3 closed`, grey |
+| Issues pane, an open epic | bar and `3/8` |
+| Issues pane, a closed epic | grey row, `✓` |
+| Issues pane, a milestone's rule | `· 9/17 closed` |
+| Issues pane, a child with children of its own | `1/3`, no bar |
+| Issues pane, under an unfolded epic or child | `✓ 3 closed`, grey |
 | Milestones pane, an open milestone | bar and `9/17` |
 | Milestones pane, the line under a milestone | the same recipe as under a folded epic, `⧗ 30 Oct · ● 1 · ○ 2 · ◌ 3 · ⊘ 1` (how many are open read from the count), or `⧗ 30 Oct · all closed` (DRAWING-issue.md, The for-you line; #45, built 0.66.0) |
 | Milestones pane, a closed milestone | grey row, `✓` |
@@ -102,7 +102,7 @@ right edge. One look everywhere (#45, built 0.65.0):
   row and a closing line never, a paragraph always; what is missing is
   added, never a second one (`sectionEnd`, and in What's next `pushRule`;
   #57, built 0.67.0). The places: What's next's sections and Last closed,
-  the groups in Epics, Closed in Milestones, the milestone detail's Issues
+  the groups in Issues, Closed in Milestones, the milestone detail's Issues
   and Description, the issue detail's Description and Comments, and
   the bottom line of every pane and detail, its empty line a row of its
   own that stays when what is above it is cut (#65, built 0.74.1)
@@ -115,7 +115,8 @@ right edge. One look everywhere (#45, built 0.65.0):
 | What's next | `── In progress · 2`, `── Next`, `── Queue`; never what the milestone filter is set to, which the filter already shows (#57, built 0.67.0) |
 | What's next, by scope | `── Next · due soon`, `── Next · in epic #30`, `── Next · in v1.2`: the scope Next was taken from (ORDERING.md, Scopes), the epic number blue; the rest of the filter, no scope part. The Queue is one rule, `── Queue`, its scopes split by headings (Headings), never on a row (#57, built 0.67.0; one Queue rule, #70) |
 | What's next, above the bottom line | `── Last closed · 2h ago · in epic #30`: how long ago, then its epic, the number blue; no epic part when it was in none. One grey closed row under it, `✓` in the mark column, that opens its detail; nothing closed by you in the milestone filter, no rule and no row (#57, built 0.67.0) |
-| Epics, a milestone's group | `── v0.3.0 · ⧗ 30 Oct · 9/17 closed` |
+| Issues, a milestone's group | `── v0.3.0 · ⧗ 30 Oct · 9/17 closed` |
+| Issues, under a milestone's group rule | what a milestone folded open in Milestones shows: its open epics at the top of their trees, then the open issues no open epic holds (yours, available, with others, blocked), then its closed epics grey (#99, decided 1). Under the label filter an open epic stays while it or anything in its tree matches; unfolded, only what matches and the issues that lead to it; its bar and count stay the whole epic's (#99, decided 2b) |
 | Milestones, closed milestones | `+ Closed · 3` |
 | Milestone detail | `− Issues · 8 open`, `+ Description` or `── Description` |
 | Issue detail | `+ Description` or `── Description`, as the milestone detail (#62, built 0.68.0, decided 4a); `− Comments · 3`, which folds (decided 1a and 4b) |
@@ -179,10 +180,10 @@ same rule and joins the table:
 
 | Where | Form | Drawn as |
 |---|---|---|
-| Milestone filter (What's next, Epics) | short | `30 Oct`, no word before it |
-| Epics pane, a milestone's rule | short | `· ⧗ 30 Oct` |
+| Milestone filter (What's next, Issues) | short | `30 Oct`, no word before it |
+| Issues pane, a milestone's rule | short | `· ⧗ 30 Oct` |
 | Milestones pane, the line under a milestone | short | `⧗ 30 Oct`, first on the line |
-| Epics, Milestones and the milestone detail, an epic's facts line | short | `· ⧗ 14 Oct`, after blocked by and unblocks, as on any issue row; no longer on the for-you line under it (#64, built 0.72.0; was the line under a folded epic, #45) |
+| Issues, Milestones and the milestone detail, an epic's facts line | short | `· ⧗ 14 Oct`, after blocked by and unblocks, as on any issue row; no longer on the for-you line under it (#64, built 0.72.0; was the line under a folded epic, #45) |
 | Issue detail, the issue's milestone | short | `· ⧗ 30 Oct` after the milestone's name, on the Milestone line (#62, built 0.68.0, decided 1a) |
 | An issue row's facts line, the issue's own due date | short | `· ⧗ 14 Oct`, after blocked by, before the milestone (DRAWING-issue.md, The facts line; #45, built 0.66.0) |
 | An issue row's facts line, its epic's due date when that is the one that counts | short | `· #30 ⧗ 19 Oct`, the number blue, in the place of its own (DRAWING-issue.md, The facts line; #70) |
@@ -220,10 +221,10 @@ of the row, which opens its detail. Tab and the arrows stop on each.
 
 | Where | Folds | Opens |
 |---|---|---|
-| Epics, an open epic | its children | the epic's detail |
-| Epics, a child with children of its own | its children | the child's detail |
+| Issues, an open epic | its children | the epic's detail |
+| Issues, a child with children of its own | its children | the child's detail |
 | Milestones, a milestone | its open issues | the milestone's detail |
-| Milestones and its detail, an epic | its tree, folded open with Epics | the epic's detail |
+| Milestones and its detail, an epic | its tree, folded open with Issues | the epic's detail |
 | Milestones, the Closed rule | the last closed milestones | |
 | Milestone detail, the Issues and Description rules | the section | |
 | Issue detail, the Comments rule and each comment | the section; a comment its text, the newest unfolded (#62, built 0.68.0, decided 4b) | |
@@ -312,8 +313,8 @@ lines (#62, built 0.68.0); it names labels, milestone and epic too, and
 Labels, Milestone and Epic are left out with Assign Me and Close (#66,
 #68, #74).
 
-The menu, the milestone filter's list and the issue detail's labels list
-(#66), milestone list (#68) and epic list (#74) open over the rows under
+The menu, the milestone filter's list, the label filter's list (#99) and
+the issue detail's labels list (#66), milestone list (#68) and epic list (#74) open over the rows under
 the top row (the labels list's frame on the Labels line's row, the
 milestone list's on the Milestone line's, the epic list's on the first
 Epic line's: DRAWING-issue.md, The labels list), at the right, in a dim frame: the rows stay where they are, and what
@@ -337,6 +338,72 @@ Back, at the left of a detail's top row, is `[ ← ]` alone, in every
 detail, with Icons on and off: not `← Milestones` or `← #24` (#62, built 0.68.0, decided 7a). Its hotkey stays `b`. These two, and the labels
 list's `✕` (DRAWING-issue.md, The labels list; #66), are the buttons
 with a sign and no word when Icons is off.
+
+## The label filter
+
+What's next and Issues share the label filter, as they share the milestone
+filter (#99, decided 2 and 2a). Their top row holds its button (hotkey
+`l`) left of the milestone filter, then `[ ☰ ]`; Milestones has neither
+filter. The button says what it is set to, as the milestone filter's does
+(#99, decided 5): `[ All ▾ ]` with no labels set, `[ No label ▾ ]` for the
+issues without a label, else the labels set, each in its colour, joined by
+`and` or `or`, dim: `[ docs and readme ▾ ]`; with or and No label ticked
+along, No label first, plain: `[ No label or docs ▾ ]`; then each label
+left out after a dim `not`: `[ docs, not bug ▾ ]`, `[ not bug ▾ ]` (#99,
+decided 7). Where the row runs out it is
+cut with `…`; the list shows the rest. Pressing it opens the label filter's list over the rows, as the
+milestone filter opens its own, and the two shut each other: its first
+line `Labels`, dim, and `✕`; then `and · or`, the one set bold, the other
+dim, each a plain button; then `▸ All`, an action that sets it on All at
+once; then No label, which follows `and · or` (#99, decided 6c): under
+and `▸ No label`, an action that sets it on the issues without a label
+alone, which a label ticked leaves; under or `☐ No label`, a box that
+ticks along with the labels and adds the issues without one. An action
+is its words after a dim `▸`, bold while the filter is set to it, as the
+milestone filter's list draws All and No milestone (The milestone
+filter's list). From or to and, with No label and a label ticked, No
+label goes and the labels stay (#99, decided K1). Then the repo's labels by name, each in its
+colour after a box, `☑` set, `☒` left out, `☐` neither, as the issue
+detail's labels list draws them (DRAWING-issue.md, The labels list). A
+press steps that label's box at once, `☐` to `☑` to `☒` and back to `☐`
+(#99, decided 7, X1), and the list stays open for the next; `▸ All` and
+`▸ No label` clear the labels left out too; it reads
+`Loading …` until the forge answers, and a list the forge refused says
+why, red. No line under the top row names what is set: the button does.
+`/next` sets it on All again, as it starts the milestone filter where you
+work.
+
+An issue with a label left out is never in it, under and and or alike
+(#99, decided 7, S1): `docs or readme, not bug` is the issues with docs or
+readme, less those with bug; and · or joins only the labels set. Under
+it, What's next shows only the issues in it, In progress, Next and
+the Queue alike; Last closed stays as it was. Issues shows an issue or a
+closed epic only when it is in it, and an open epic while it or anything
+loaded under it is, unless the epic has a label left out: then it goes
+with its tree (Rules: Issues, under a milestone's group rule).
+Groups left empty go; with nothing left, `No open issues with these
+labels.`, dim. Ticking `epic` (the Epic label setting) shows the epics
+alone; one epic is unfolded or opened in its detail: there is no epic
+filter of its own (#99, decided 3). Leaving `epic` out (`☒`) hides the epics, each with its tree, and keeps
+the issues no epic holds.
+
+Drawn by: `titleRow` and `labelFilterList` in hooks/views/frame.tsx;
+`matches` in hooks/filter.ts says whether an issue is in it, `leadsTo` and
+`narrowed` in hooks/epics.ts what of a tree stays; `labelWords` in
+hooks/filter.ts the button's words.
+
+## The milestone filter's list
+
+Its button names what the filter is set to: the milestone, `No milestone`
+or `All` (#99, decided 6d; was None). Pressed, its list opens over the
+rows: `▸ All`, then `▸ No milestone` while an issue has none, each an
+action, its words after a dim `▸`, as the label filter's list draws them;
+then each open milestone with an open issue or an epic, due first
+(ORDERING.md), its name padded to a column and its due date in the short
+form after it. The one set is bold; a press sets it and shuts the list.
+
+Drawn by: `listOverlay` and `actionText` in hooks/views/frame.tsx;
+`filterOptions` in hooks/filter.ts what it offers.
 
 ## The help page
 

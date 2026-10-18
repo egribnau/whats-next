@@ -4,9 +4,9 @@ import type { EngineInterface } from 'claude-code'
 import type { Where } from '../types'
 import { HERE, milestoneOf } from './where'
 
-// The panes' ids: What's next, Epics and Milestones.
+// The panes' ids: What's next, Issues and Milestones.
 export const PANE = 'next'
-export const EPICS_PANE = 'next-epics'
+export const ISSUES_PANE = 'next-issues'
 export const MILESTONES_PANE = 'next-milestones'
 
 // Per pane, keyed by its id: where it is (hooks/where.ts).

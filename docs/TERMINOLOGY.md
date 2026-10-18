@@ -50,7 +50,7 @@ free one is blocked.
 
 | Term | Means |
 |---|---|
-| pane | One of What's Next's docked panes: What's next, Epics, Milestones. |
+| pane | One of What's Next's docked panes: What's next, Issues, Milestones. |
 | What's next | The pane of In progress, Next and the Queue. |
 | In progress | Your open issues. |
 | Next | The available issue to take now. |
@@ -58,10 +58,11 @@ free one is blocked.
 | heading | A line in the Queue, `── ` and bold words with no dashes after, naming the scope of the rows under it: Due soon, In epic #30, In v1.2, then the milestone filter's name for the rest, and Blocked over the blocked rows (#70). Not a rule. |
 | where you work | Where What's next starts from within the milestone filter: the epic (else the milestone) of your issue in progress, else of your last closed one; it widens to the parent epic, the milestone, then the rest of the filter (#57, built 0.67.0). |
 | Last closed | The issue you closed last within the milestone filter, from anywhere (the pane, the browser, a commit); What's next follows on from it (#57, built 0.67.0). |
-| Epics | The pane of epics, grouped by milestone. |
+| Issues | The pane of the open issues in the milestone and label filters, grouped by milestone, each epic folding open to its tree; `/next` opens it while the repo has open issues (#99, decided 4). |
 | Milestones | The pane of open milestones, then Closed. |
 | Closed | The section of closed milestones in Milestones. |
-| milestone filter | The choice What's next and Epics share, and what it is set to: a milestone, None (the issues without one; `/next` says no milestone), or All; they show only what is in it. It starts where you work: your issue in progress's milestone, else your last closed issue's, else the one due first (#57, built 0.67.0); on All when an issue of yours or an available one is due soon outside it (#70). |
+| milestone filter | The choice What's next and Issues share, and what it is set to: a milestone, No milestone (the issues without one), or All; they show only what is in it. It starts where you work: your issue in progress's milestone, else your last closed issue's, else the one due first (#57, built 0.67.0); on All when an issue of yours or an available one is due soon outside it (#70). |
+| label filter | The choice What's next and Issues share, as the milestone filter (#99, decided 2a): the labels they show, and whether an issue needs all of them (and) or one (or); All (no labels, every issue) or No label (the issues without a label; with or, ticked along with labels: `No label or docs`). Its button, left of the milestone filter, says what it is set to: `[ All ▾ ]`, `[ No label ▾ ]`, `[ docs and readme ▾ ]` (#99, decided 5); it opens its list, `and · or` on its first line, `▸ All` under it, then No label (under and `▸ No label`, under or a box) and a box per label, which a press steps `☐` → `☑` set → `☒` left out → `☐` (#99, decided 2, 6 and 7). A label left out takes its issues out under and and or alike: `[ docs, not bug ▾ ]` (#99, decided 7). It is also the epic filter: tick `epic` for only the epics; one epic is unfolded, or opened in its detail (#99, decided 3). |
 | detail | An issue or a milestone shown in place of the list, left with Back. |
 | section | A part of a list or a detail under a rule that folds with + or −: Closed in Milestones; Issues and Description in the milestone detail. |
 | row | One issue, epic or milestone in a list. |
@@ -120,5 +121,7 @@ free one is blocked.
 | picker, pick | milestone filter | It is what it is: a filter on milestone; #57. |
 | focus (for where you work) | where you work | Focus is the keyboard's: the control Enter presses; #57. |
 | Work on this | Prompt | Too long for the top row; what it does first is put the issue in the prompt; #62. |
-| No milestone (in the milestone filter) | None | Shorter on the filter's button; the Epics rule over epics without one keeps No milestone; #62. |
+| None (in the milestone filter) | No milestone | One word for it everywhere, as the label filter's No label; #99, decided 6d (was None, #62). |
+| None, Unlabelled (in the label filter) | No label | Pairs with No milestone; #99, decided 6b. |
+| Clear All | All | The list's action that sets the filter on All is named as what it sets; #99, decided 6. |
 | unparent | take out of | Put under and take out of, as the milestone list's move to and take out of; #74. |

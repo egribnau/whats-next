@@ -189,7 +189,7 @@ test('with epics off, the tracker is not asked for them', async () => {
   expect(calls).not.toContain('epics')
 })
 
-test('Epics: grouped by milestone, open first, children asked once, standing for who you are', async () => {
+test('Issues: grouped by milestone, open first, children asked once, standing for who you are', async () => {
   const calls: string[] = []
   const t = fake(
     {
@@ -203,20 +203,20 @@ test('Epics: grouped by milestone, open first, children asked once, standing for
     calls,
   )
   const known = await load(t, { me: 'alice' })
-  const { groups } = await known.epics(ALL)
+  const groups = (await known.issues(ALL)) ?? []
   expect(groups.map(g => g.title)).toEqual(['v1', null])
-  expect(groups[0]?.epics.map(e => [e.number, e.state])).toEqual([
+  expect(groups[0]?.issues.map(e => [e.number, e.state])).toEqual([
     [3, 'open'],
     [9, 'closed'],
   ])
-  expect(groups[0]?.epics[0]?.children?.map(c => c.number)).toEqual([10, 11])
-  expect(groups[0]?.epics[0]?.children?.map(c => c.mine)).toEqual([true, false])
-  expect(groups[0]?.epics[1]?.children).toBe(null)
-  expect(groups[1]?.epics[0]?.children).toBe(null)
+  expect(groups[0]?.issues[0]?.children?.map(c => c.number)).toEqual([10, 11])
+  expect(groups[0]?.issues[0]?.children?.map(c => c.mine)).toEqual([true, false])
+  expect(groups[0]?.issues[1]?.children).toBe(null)
+  expect(groups[1]?.issues[0]?.children).toBe(null)
   expect(groups[0]).toMatchObject({ due: '2026-11-01T00:00:00Z', closed: 1, total: 4 })
   // Closed epics are not asked about; each open one once.
   expect(calls.filter(c => c.startsWith('children')).sort()).toEqual(['children 3', 'children 4'])
-  await known.epics(ofMilestone('v1'))
+  await known.issues(ofMilestone('v1'))
   expect(calls.filter(c => c.startsWith('children'))).toHaveLength(2)
 })
 
@@ -357,8 +357,8 @@ test("a milestone's epic carries its children, asked once, and is not blocked by
   expect(epic?.children?.map(c => c.number)).toEqual([33, 34])
   expect(epic?.blocked).toBe(false)
   expect(issues?.find(c => c.number === 33)?.children).toBeUndefined()
-  // Shared with the Epics pane: its children are not asked again.
-  await known.epics(ALL)
+  // Shared with the Issues pane: its children are not asked again.
+  await known.issues(ALL)
   expect(calls.filter(c => c.startsWith('children'))).toEqual(['children 29'])
 })
 
@@ -556,9 +556,9 @@ test('due soon: the available issues due soon outside the milestone filter are c
 
 test('the milestone filter starts on All when an issue of yours or an available one is due soon outside where you work', async () => {
   const options = [
-    { filter: ofMilestone('v1'), label: 'v1' },
-    { filter: NONE, label: 'None' },
     { filter: ALL, label: 'All' },
+    { filter: NONE, label: 'No milestone' },
+    { filter: ofMilestone('v1'), label: 'v1' },
   ]
   // You closed #41 in v1; #50, without a milestone, is due tomorrow.
   const available = fake({ ...WORK, open: [...(WORK.open ?? []).filter(i => i.number !== 50), free(due(row(50, '2026-08-01T00:00:00Z'), '2026-10-10'))] })
@@ -575,10 +575,10 @@ test('the milestone filter starts on All when an issue of yours or an available 
 
 test('the milestone filter starts where you work: your issue in progress updated last, else the one you closed last, else the first milestone', async () => {
   const options = [
+    { filter: ALL, label: 'All' },
+    { filter: NONE, label: 'No milestone' },
     { filter: ofMilestone('v1'), label: 'v1' },
     { filter: ofMilestone('v2'), label: 'v2' },
-    { filter: NONE, label: 'None' },
-    { filter: ALL, label: 'All' },
   ]
   const t = fake({ ...WORK, mine: [{ ...row(61, '2026-09-02T00:00:00Z', 'v2'), updated: '2026-10-08T00:00:00Z' }] })
   expect(await (await load(t, { me: 'alice', epics: false })).startingFilter(options)).toEqual(ofMilestone('v2'))
@@ -586,15 +586,15 @@ test('the milestone filter starts where you work: your issue in progress updated
   const closedOnly = await load(fake(WORK), { me: 'alice', epics: false })
   expect(await closedOnly.startingFilter(options)).toEqual(ofMilestone('v1'))
   // Its milestone not offered: the first milestone offered, else All.
-  expect(await closedOnly.startingFilter(options.slice(1))).toEqual(ofMilestone('v2'))
+  expect(await closedOnly.startingFilter(options.filter(o => o.label !== 'v1'))).toEqual(ofMilestone('v2'))
   expect(await closedOnly.startingFilter([{ filter: ALL, label: 'All' }])).toEqual(ALL)
   // Nothing to start from: the first milestone offered.
   const empty = await load(fake({ ...WORK, lastClosed: {} }), { me: 'alice', epics: false })
-  expect(await empty.startingFilter(options.slice(1))).toEqual(ofMilestone('v2'))
+  expect(await empty.startingFilter(options.filter(o => o.label !== 'v1'))).toEqual(ofMilestone('v2'))
 })
 
 // A request that fails says nothing: what it would have said is unknown,
-// in Epics, in a milestone and under a row alike, and the rest is as it is.
+// in Issues, in a milestone and under a row alike, and the rest is as it is.
 const SPLIT: Fake = {
   open: [free(row(29, '2026-10-01T00:00:00Z', 'v1')), free(row(31, '2026-10-02T00:00:00Z', 'v1'))],
   epics: [
@@ -605,10 +605,10 @@ const SPLIT: Fake = {
   failingChildren: [29],
 }
 
-test("Epics: an epic whose children request fails has them unknown, the other epics as they are", async () => {
+test("Issues: an epic whose children request fails has them unknown, the other epics as they are", async () => {
   const known = await load(fake(SPLIT))
-  const { groups } = await known.epics(ALL)
-  expect(groups[0]?.epics.map(e => [e.number, e.children?.map(c => c.number) ?? null])).toEqual([
+  const groups = (await known.issues(ALL)) ?? []
+  expect(groups[0]?.issues.map(e => [e.number, e.children?.map(c => c.number) ?? null])).toEqual([
     [29, null],
     [31, [40, 41]],
   ])

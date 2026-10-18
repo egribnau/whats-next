@@ -50,7 +50,7 @@ it is with.
 | What's next, In progress | `●` |
 | What's next, Next and the Queue | `○` |
 | What's next, the blocked at the end of the Queue | `⊘` |
-| Epics, a child | `●` `⊘` `◌` `○`, or `⊕`/`⊖` coloured so when it has children |
+| Issues, an issue no epic holds, and a child | `●` `⊘` `◌` `○`, or `⊕`/`⊖` coloured so when it has children (#99) |
 | Milestones and its detail, an issue under a milestone or an epic | the same |
 | Issue detail, the heading and Blocked by | the same, `✓` when closed (#72, built 0.69.0) |
 | Issue detail, Blocks | `⊘`, or `●` when yours; `✓` when closed (#72, built 0.69.0) |
@@ -80,7 +80,7 @@ place of its kind.
 | Where | Number column | Title |
 |---|---|---|
 | What's next | one for all sections | bold for Next |
-| Epics | one for every group and tree | bold for an epic |
+| Issues | one for every group and tree | bold for an epic |
 | Milestones | one for every milestone folded open | bold for an epic |
 | Milestone detail, Issues | one for the tree | bold for an epic |
 | Issue detail, heading | the mark, then `#n` blue; the heading grey as a whole once closed | wraps over two lines |
@@ -121,9 +121,9 @@ Drawn by: `issueRow`, its parts through `partsLine`; the due date by `duePart`; 
 | Where | Drawn as |
 |---|---|
 | What's next, every row | blocked by, unblocks, due date, milestone (not when the milestone filter is set to one, nor where the rule or heading above names it), labels, age |
-| Epics, a child | the same |
+| Issues, an issue no epic holds, and a child | the same |
 | Milestones, an issue under a milestone | blocked by, unblocks, due date, labels, age |
-| An epic at the top of a tree: Epics, Milestones, the milestone detail | the same as the place's issue rows, folded or unfolded: blocked by (its own children left out), unblocks, due date, milestone (Epics with the filter on All), labels, the Epic label too, age (#64, built 0.72.0) |
+| An epic at the top of a tree: Issues, Milestones, the milestone detail | the same as the place's issue rows, folded or unfolded: blocked by (its own children left out), unblocks, due date, milestone (Issues with the filter on All), labels, the Epic label too, age (#64, built 0.72.0) |
 | Issue detail, under the heading | not the facts line: one line of its own, see The issue detail's heading |
 
 ## The for-you line
@@ -141,7 +141,7 @@ sign before.
 An epic is an issue, so its row has the facts line any issue row has,
 folded or unfolded, its due date there; folded, the for-you line comes
 under it, the counts alone (#64, built 0.72.0). One epic is drawn so in
-Epics, in Milestones and in the milestone detail (#64, built 0.72.0).
+Issues, in Milestones and in the milestone detail (#64, built 0.72.0).
 
 The line under a milestone (#45, built 0.66.0):
 
@@ -164,7 +164,7 @@ say it already and get no word before them. Where all its children are
 closed: `children all closed`,
 amber, as for every epic or milestone still open (DRAWING.md, Counts and
 states; #45, built 0.65.0). With no children, `no children`; not known,
-`children unknown` (`summary`). In Epics, a children request that fails
+`children unknown` (`summary`). In Issues, a children request that fails
 leaves only that epic's children unknown, folded and open; the other epics
 draw as they are, as in a milestone and under a row (#88, built 0.75.0,
 decided 1).
@@ -174,7 +174,7 @@ what, `duePart` the due date before it; `partsLine` draws it, one text.
 
 | Where | Counts |
 |---|---|
-| Epics, under a folded epic | its children, after the word `children` |
+| Issues, under a folded epic | its children, after the word `children` |
 | Milestones and its detail, under an epic, folded | its children, after the word `children` |
 | Milestones, under a milestone | its issues that are not epics, as far as the pane knows them without asking (only `● n` until every issue not yours was checked) |
 | Milestone detail, under the bar | its issues that are not epics |
@@ -277,7 +277,7 @@ each, drawn as a Blocked by line, number blue, under the key `Epic`, or
 under several epics, each a line, the key on the first only, in the epic
 list's order; on GitHub it has one parent at most (#74, decided 3A). On
 Forgejo and GitLab an epic has none: an epic that depends on it waits
-for it, as in Epics, so it is under Blocks (0.74.3).
+for it, as in Issues, so it is under Blocks (0.74.3).
 
 Then its children, under the key `Children`, on every forge: an epic's on
 Forgejo (the issues it depends on) and GitLab (the issues it links as
@@ -377,7 +377,8 @@ other way round.
 
 Its lines are drawn as the milestone filter's list (decided 2i):
 `No milestone` first, as the epic list's `No epic` (#74, decided 7; the
-milestone filter keeps `None` last, as it is a filter), then the open
+milestone filter's list has `▸ All` and `▸ No milestone` first, as
+actions: DRAWING.md, The milestone filter's list), then the open
 milestones in the filter's order, due first (ORDERING.md), on GitLab a
 parent group's too; each name padded to a column, its
 due date in the short form after it, no `⧗` (DRAWING.md, Due dates). The
@@ -388,7 +389,7 @@ issue there at once and shuts the list, and the pane stays on the issue
 answers, a spinner turns on the Milestone line before its value, as the
 labels list waits (#74, decided 8c-a); the value is the new milestone from
 the press on, as the labels list ticks at once, and the old one again when
-the forge refuses. What's next, Epics and Milestones show the change once
+the forge refuses. What's next, Issues and Milestones show the change once
 the forge has made it, the milestone counts following, as after Assign Me
 and Close. The open milestones are
 known already, so opening it asks nothing; until they are, it reads
@@ -425,7 +426,7 @@ milestone list, and the other way round (decided 1B, 5a-i).
 
 Its first line is `No epic` (`No parent` on GitHub), a plain button
 that takes the issue out of every epic it is under (decided 2a-i). Then
-the open epics in the Epics pane's order: by milestone, due first, then
+the open epics in the Issues pane's order: by milestone, due first, then
 those without one (ORDERING.md), the issue itself left out. Each line
 is drawn as a detail line naming an issue (Detail lines that name an
 issue): its mark, number and title, after a box, `☑` the issue is under
@@ -450,7 +451,7 @@ GitHub answers the old parent for a while. On Forgejo and
 GitLab an issue can be under several epics; on GitHub it has one parent,
 so ticking another moves it and unticks the old. Only the parent
 changes: the issue keeps its milestone, which the Milestone line changes
-(decided 4a). The Epic lines, What's next, Epics and Milestones show the
+(decided 4a). The Epic lines, What's next, Issues and Milestones show the
 change at once, as after Labels. The epic's own text, such as a list of
 its children in its description, is left alone. The open epics, and on
 GitHub the open issues of the milestone, are known already from the

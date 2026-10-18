@@ -423,7 +423,7 @@ test("github.com detail: Close sends state closed, and the reloaded lists leave 
 
   expect(sent).toEqual([{ body: { state: 'closed' } }])
   const all = await texts(ui)
-  expect(all[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
   expect(all.some(t => t.includes('#14'))).toBe(false)
 })
 

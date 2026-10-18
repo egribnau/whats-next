@@ -2,7 +2,7 @@ import type { RenderChildren } from 'claude-code'
 
 import type { IssueRow, Overview, Repo, Scope } from '../../types'
 import { age, fit, type Part } from '../draw'
-import { ALL, filterLabel, within as withinFilter } from '../filter'
+import { ALL, filterLabel, isAll, within as withinFilter } from '../filter'
 import { waitingText } from '../next'
 import { slug } from '../tracker'
 import { PANE } from '../panes'
@@ -112,7 +112,8 @@ export async function nextView(p: Pane, f: Frame, m: Exclude<Overview, { kind: '
       open = false
     }
     if (listed.length === 0) {
-      rows.push(d.para('none', within ? `No open issues${within}.` : `No open issues in ${slug(r)}.`, { dimColor: true }))
+      const none = !isAll(p.look.labels) ? 'No open issues with these labels.' : within ? `No open issues${within}.` : `No open issues in ${slug(r)}.`
+      rows.push(d.para('none', none, { dimColor: true }))
       open = true
     } else {
       pushRule(d.rule('in-progress', 'In progress', [{ text: `${m.inProgress.length}` }]))

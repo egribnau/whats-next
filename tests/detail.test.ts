@@ -337,7 +337,7 @@ test('a blocker opens its issue in the same pane; Back returns to the issue it w
   await ui.press({ key: 'back' })
   expect((await texts(ui)).some(t => t.includes('#29 Docs: config keys'))).toBe(true)
   await ui.press({ key: 'back' })
-  expect((await texts(ui))[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
 })
 
 test('Blocks lines open their issue too; pull requests are no buttons', TOKEN, async ($, on) => {
@@ -358,7 +358,7 @@ test('an issue opened from the list again starts a new trail', TOKEN, async ($, 
   await ui.press({ key: 'back' })
   await ui.press({ key: 'pick-29' })
   await ui.press({ key: 'back' })
-  expect((await texts(ui))[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
 })
 
 test('a passed due date is red', TOKEN, async ($, on) => {
@@ -464,7 +464,7 @@ test("What's next goes back to the overview", TOKEN, async ($, on) => {
   await ui.press({ key: 'back' })
 
   const all = await texts(ui)
-  expect(all[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
   await expect(ui.find({ key: 'prompt' })).resolves.toBeUndefined()
 })
 
@@ -613,7 +613,7 @@ test('Assign Me adds you, keeps the others, and the list follows: jdoe\'s alone,
   expect(sent).toEqual([{ method: 'PATCH', path: '/api/v1/repos/boats/radar/issues/29', body: { assignees: ['jdoe', 'alice'] } }])
   expect(asked.filter(u => u.includes('/issues/search')).length).toBeGreaterThan(searches)
   // Back on What's next, #29 under your issues.
-  expect((await texts(ui))[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
   await expect(ui.find({ key: 'pick-29' })).resolves.toBeDefined()
   await ui.press({ key: 'pick-29' })
   expect(await labelOf(ui, 'assign')).toBe('Unassign Me')
@@ -623,7 +623,7 @@ test('Assign Me adds you, keeps the others, and the list follows: jdoe\'s alone,
   await ui.press({ key: 'assign' })
   expect(sent.at(-1)).toEqual({ method: 'PATCH', path: '/api/v1/repos/boats/radar/issues/29', body: { assignees: ['jdoe'] } })
   const all = await texts(ui)
-  expect(all[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
   expect(all.some(t => t.includes('#29'))).toBe(false)
 })
 
@@ -634,7 +634,7 @@ test('Close closes at once, and the lists leave it out though the search still h
   await ui.press({ key: 'close' })
   expect(sent).toEqual([{ method: 'PATCH', path: '/api/v1/repos/boats/radar/issues/29', body: { state: 'closed' } }])
   const all = await texts(ui)
-  expect(all[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
   expect(all.some(t => t.includes('#29'))).toBe(false)
 })
 
@@ -659,7 +659,7 @@ test('Reopen goes back to the list it came from', TOKEN, async ($, on) => {
   expect(await labelOf(ui, 'close')).toBe('Reopen')
   await ui.press({ key: 'close' })
   expect(sent).toEqual([{ method: 'PATCH', path: '/api/v1/repos/boats/radar/issues/29', body: { state: 'open' } }])
-  expect((await texts(ui))[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
   await expect(ui.find({ key: 'back' })).resolves.toBeUndefined()
 })
 
@@ -713,13 +713,13 @@ test('Prompt assigns you first when you are not yet assigned', TOKEN, async ($, 
   await ui.press({ key: 'prompt' })
   expect(sent).toEqual([{ method: 'PATCH', path: '/api/v1/repos/boats/radar/issues/29', body: { assignees: ['alice'] } }])
   expect(toasts.at(-1)).toBe('#29 is yours and in the prompt: Esc to edit it there')
-  expect((await texts(ui))[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
 
   await ui.press({ key: 'pick-29' })
   await ui.press({ key: 'prompt' })
   expect(sent).toHaveLength(1)
   expect(toasts.at(-1)).toBe('#29 is in the prompt: Esc to edit it there')
-  expect((await texts(ui))[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
 })
 
 function promptBox(on: On, typed: string, filled: Filled, take = true, toasts: string[] = []) {

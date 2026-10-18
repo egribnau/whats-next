@@ -1,6 +1,6 @@
 import type { Elements, RenderChildren, RenderSurface } from 'claude-code'
 
-import type { DueBy, Epic, FilterShown, IssueRow } from '../types'
+import type { DueBy, Epic, FilterShown, IssueRow, LabelFilter } from '../types'
 import { bar, markOf, standing, summary, tally, type Folding, type Mark, type Standing, type TreeLine } from './epics'
 import { ofMilestone, sameFilter } from './filter'
 import { day, dueSoon, dueText, readable } from './issue'
@@ -22,6 +22,8 @@ export type Look = {
   icons: boolean
   today: number
   filter: FilterShown | null
+  // What the label filter is set to, What's next's and Issues' both.
+  labels: LabelFilter
   unblocks: Readonly<Record<number, number>>
   dueBy: Readonly<Record<number, DueBy>>
 }
@@ -549,7 +551,7 @@ export function draw(look: Look) {
         {joined(parts)}
       </Text>
     )
-  // An open epic at the top of a tree, in Epics and under a milestone: its
+  // An open epic at the top of a tree, in Issues and under a milestone: its
   // fold mark, number, bold title, bar and count; under it its facts line,
   // as any issue row's; folded, then the for-you line: what there is for
   // you in it (DRAWING-issue.md, The for-you line).

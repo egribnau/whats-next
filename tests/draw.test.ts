@@ -30,6 +30,7 @@ const lookOf = (more: Partial<Look> = {}): Look => ({
   icons: false,
   today: NOW,
   filter: null,
+  labels: { labels: [], mode: 'and' },
   unblocks: { 29: 2 },
   dueBy: {},
   ...more,

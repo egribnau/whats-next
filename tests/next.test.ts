@@ -152,8 +152,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const out = await $.command.run(RUN)
     const ui = await $.ui.mount({ ...PANE, surface })
 
+    // Issues is open too: the tabs name the panes, so the title row does not.
     expect(await texts(ui)).toEqual([
-      "What's next",
       ...ruleTexts('In progress', '1'),
       '● #42 Issue 42',
       '● ',
@@ -264,9 +264,10 @@ test('dependencies are checked in the order of where you work, past Next through
   world(on, REPO, asked)
   await $.command.run(RUN)
 
-  // v1.2 first, where your #42 is; then the rest, oldest first.
+  // v1.2 first, where your #42 is; then the rest, oldest first. Then
+  // Issues, for the marks of the issues it lists: only #60 is new.
   const checked = asked.map(u => /\/issues\/(\d+)\/dependencies$/.exec(new URL(u).pathname)?.[1]).filter(Boolean)
-  expect(checked).toEqual(['37', '51', '33', '29'])
+  expect(checked).toEqual(['37', '51', '33', '29', '60'])
 })
 
 test('the Queue holds 10 checked issues, a blocked one at the bottom, the rest counted', TOKEN, async ($, on) => {
@@ -291,9 +292,10 @@ test('the Queue holds 10 checked issues, a blocked one at the bottom, the rest c
   expect(all.indexOf('── In All')).toBeLessThan(all.indexOf('○  #2 Issue 2'))
   expect(all.indexOf('── Blocked')).toBeGreaterThan(all.indexOf('  and 13 more'))
   expect(all.indexOf('── Blocked')).toBeLessThan(all.indexOf('⊘  #3 Issue 3'))
-  // Next and the 11 issues past it are checked; #13 to #25 are not.
+  // What's next checks Next and the 11 issues past it, then stops; Issues,
+  // which marks every issue it lists, checks #13 to #25 after it, each once.
   const checked = asked.map(u => /\/issues\/(\d+)\/dependencies$/.exec(new URL(u).pathname)?.[1]).filter(Boolean)
-  expect(checked).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'])
+  expect(checked).toEqual(Array.from({ length: 25 }, (_, k) => String(k + 1)))
 })
 
 test('a second line too long for the pane is cut at its end, its indent kept', TOKEN, async ($, on) => {
@@ -404,7 +406,7 @@ test('clicking an issue in the queue opens its detail, and back returns', TOKEN,
 
   await ui.press({ key: 'pick-51' })
   await ui.press({ key: 'back' })
-  expect((await texts(ui))[0]).toBe("What's next")
+  await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
   await expect(ui.find({ key: 'pick-51' })).resolves.toBeDefined()
 })
 
@@ -521,7 +523,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await $.command.run(RUN)
     const ui = await $.ui.mount({ ...PANE, surface })
 
-    expect((await texts(ui))[0]).toBe("What's next")
+    await expect(ui.find({ key: 'labels' })).resolves.toBeDefined()
     const menu = (await ui.find({ key: 'menu' })) as unknown as { props: Record<string, unknown> }
     expect(menu.props.label).toBe('☰')
     // Refresh hidden, for its hotkey.
@@ -591,7 +593,7 @@ test('picking No milestone shows the issues without one, and All shows every one
   await ui.press({ key: 'milestone' })
   await ui.press({ key: 'milestone-none' })
   let all = await texts(ui)
-  expect(await filterLabel(ui)).toBe('None ▾')
+  expect(await filterLabel(ui)).toBe('No milestone ▾')
   expect(all).toContain(rule('In progress · 0'))
   expect(all).toContain('○ #29 Issue 29')
   expect(all).toContain('⊘ #33 Issue 33')
@@ -609,7 +611,7 @@ for (const rows of [60, 12]) {
     world(on, { ...REPO, open: [[...(REPO.open?.[0] ?? []), ...many]], milestones: MILESTONES })
     await $.command.run(RUN)
     const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, scroll: { offset: 0, bodyRows: rows } }, surface: 'terminal' })
-    for (const [pick, label] of [['none', 'None ▾'], ['all', 'All ▾'], ['m:v1.2', 'v1.2 ▾']] as const) {
+    for (const [pick, label] of [['none', 'No milestone ▾'], ['all', 'All ▾'], ['m:v1.2', 'v1.2 ▾']] as const) {
       await ui.press({ key: 'milestone' })
       await ui.press({ key: `milestone-${pick}` })
       expect(await filterLabel(ui)).toBe(label)
@@ -628,7 +630,7 @@ test('a milestone with nothing open in it says so', TOKEN, async ($, on) => {
   expect(await filterLabel(ui)).toBe('v1.2 ▾')
   await ui.press({ key: 'milestone' })
   const keys = ((await ui.findAll({ type: 'Button' })) as unknown as Btn[]).map(b => b.key).filter(k => k.startsWith('milestone-'))
-  expect(keys).toEqual(['milestone-m:v1.2', 'milestone-all'])
+  expect(keys).toEqual(['milestone-all', 'milestone-m:v1.2'])
 })
 
 test('switching milestones asks Forgejo only for dependencies it has not checked', TOKEN, async ($, on) => {
@@ -640,8 +642,9 @@ test('switching milestones asks Forgejo only for dependencies it has not checked
     await ui.press({ key: 'milestone' })
     await ui.press({ key: `milestone-${pick}` })
   }
+  // What's next's checks and Issues' #60, each once.
   const deps = asked.map(u => /\/issues\/(\d+)\/dependencies$/.exec(new URL(u).pathname)?.[1]).filter(Boolean)
-  expect(deps).toEqual(['37', '51', '33', '29'])
+  expect(deps).toEqual(['37', '51', '33', '29', '60'])
   expect(asked.filter(u => new URL(u).pathname.endsWith('/milestones') && new URL(u).searchParams.get('state') === 'open')).toHaveLength(1)
 })
 

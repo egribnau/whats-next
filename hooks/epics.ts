@@ -237,23 +237,61 @@ export const dueFirst = (milestones: readonly MilestoneRow[]) =>
     (a, b) => (a.due === null ? 1 : 0) - (b.due === null ? 1 : 0) || (a.due ?? '').localeCompare(b.due ?? '') || a.title.localeCompare(b.title),
   )
 
-// The groups the milestone filter shows: one milestone's epics, those without a milestone,
+// The groups the milestone filter shows: one milestone's issues, those without one,
 // or for All each open milestone's in the milestone filter's order and No milestone last.
-// Epics in a closed milestone show under none of them.
+// Issues in a closed milestone show under none of them.
 export function groupsFor<T extends { milestone: string | null }>(
   filter: MilestoneFilter,
   milestones: readonly MilestoneRow[],
-  epics: readonly T[],
-): { milestone: MilestoneRow | null; epics: T[] }[] {
-  const groups: { milestone: MilestoneRow | null; epics: T[] }[] = []
+  issues: readonly T[],
+): { milestone: MilestoneRow | null; issues: T[] }[] {
+  const groups: { milestone: MilestoneRow | null; issues: T[] }[] = []
   for (const m of dueFirst(milestones)) {
     if (!holds(filter, m.title)) continue
-    const mine = epics.filter(e => e.milestone === m.title)
-    if (mine.length > 0) groups.push({ milestone: m, epics: mine })
+    const mine = issues.filter(e => e.milestone === m.title)
+    if (mine.length > 0) groups.push({ milestone: m, issues: mine })
   }
   if (holds(filter, null)) {
-    const none = epics.filter(e => e.milestone === null)
-    if (none.length > 0) groups.push({ milestone: null, epics: none })
+    const none = issues.filter(e => e.milestone === null)
+    if (none.length > 0) groups.push({ milestone: null, issues: none })
   }
   return groups
+}
+
+// Under the label filter (#99, decided 2b): whether issue `n`, with
+// `labels`, is in it (`match`), or an open issue loaded under it is, as far
+// as `kids` knows them. An issue with a label left out (`out`) goes, and
+// what is under it with it (#99, decided 7). An issue met again in a loop
+// leads nowhere new.
+export function leadsTo(
+  n: number,
+  labels: readonly { name: string }[],
+  kids: (n: number) => readonly Child[] | null | undefined,
+  match: (labels: readonly { name: string }[]) => boolean,
+  out: (labels: readonly { name: string }[]) => boolean = () => false,
+  seen = new Set<number>(),
+): boolean {
+  if (out(labels)) return false
+  if (match(labels)) return true
+  if (seen.has(n)) return false
+  seen.add(n)
+  return (kids(n) ?? []).some(c => c.state === 'open' && leadsTo(c.number, c.labels, kids, match, out, seen))
+}
+
+// The lines under an unfolded epic as the label filter leaves them: each
+// child that `keeps` says stays, and what is under it; one that goes takes
+// the lines under it along. The closing lines stay.
+export function narrowed(lines: readonly TreeLine[], keeps: (c: Child) => boolean): TreeLine[] {
+  const out: TreeLine[] = []
+  let gone: number | null = null
+  for (const l of lines) {
+    if (gone !== null && l.depth > gone) continue
+    gone = null
+    if (l.kind === 'child' && !keeps(l.child)) {
+      gone = l.depth
+      continue
+    }
+    out.push(l)
+  }
+  return out
 }
