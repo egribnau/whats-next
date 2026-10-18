@@ -49,6 +49,11 @@ install all of it.
   token setting is sensitive: the test sandbox cannot read the manifest)
   and `docs/check-marketplace.sh` (the marketplace name is written once,
   as `MARKETPLACE` in `hooks/forge.ts`, and matches the marketplace file).
+- The engine lays no types in an installed plugin's folder, and the repo
+  root is one: `tsc -p .` reads `.claude-plugin/types/claude-code/index.d.ts`,
+  git-ignored, copied from Claude Code's own. After a Claude Code update,
+  copy the newest `/tmp/claude-<uid>/bundled-skills/<version>/*/plugin-authoring/types/claude-code.d.ts`
+  over it; its first line names the version that wrote it.
 - Every file stays under 256 KiB, the most the plugin directory allows:
   `docs/shoot.py` shrinks each screenshot with pngquant.
 - `tests/tokens.test.ts` shows a token never leaks: keep it passing, and give
