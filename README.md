@@ -167,7 +167,8 @@ warranty.
 ## What it sends where
 
 What's Next talks only to the host in the repo's `origin`, over HTTPS. It
-sends nothing anywhere else: no other hosts, no usage data.
+sends nothing anywhere else: no other hosts, no usage data. Which host that is
+comes from your repo, so the code names no fixed address.
 
 | What | To | With |
 | --- | --- | --- |
@@ -176,6 +177,9 @@ sends nothing anywhere else: no other hosts, no usage data.
 | On Forgejo, your account's tokens, to read the scopes of the one in use (matched on its last eight characters) | `https://<host>/api/v1/users/<you>/tokens` | the Forgejo token |
 
 A token goes only to the host it is for (see [What it needs](#what-it-needs)).
+Tokens come only from the four token settings, kept in secure storage: no
+environment variable and no file of another tool is read for one, and the
+tests check this.
 
 On your computer it runs these programs, each with the words shown and
 nothing else:
@@ -184,20 +188,23 @@ nothing else:
   find the repo;
 - `pwd`, to name the folder in setup when it holds no repo;
 - `open` on macOS, else `xdg-open`, with a page's `https` address, when you
-  open an issue, a milestone or What's Next's own repo in the browser.
+  open an issue, a milestone or What's Next's own repo in the browser. An
+  address the forge gives that is not `https://` is not opened: nothing else
+  it fetches is ever run.
 
 It reads one file, its own `.claude-plugin/plugin.json`, for the version on
-its bottom line. It reads no other file and no environment variable: tokens
-come only from its settings.
+its bottom line, and sends nothing of it anywhere. It reads no other file and
+no environment variable.
 
 In Claude Code it:
 
-- reads the text in your prompt, only when you press Prompt on an issue, to
-  add the issue under what you typed or put it there alone. The issue goes to
-  Claude only when you send the prompt. It reads nothing else of the
-  conversation, and sends none of it to the forge;
-- writes one setting, Icons or Compact, in `/config`, only when you answer
-  its question about it after setup;
+- reads your prompt only when you press Prompt on an issue, and only to see
+  whether it already holds text: the issue goes under what you typed, or in
+  alone. The issue goes to Claude only when you send the prompt. It reads
+  nothing else of the conversation, and sends none of it to the forge;
+- writes only its own settings Icons and Compact in `/config`, each only when
+  you answer its question about it after setup: no other setting, no
+  permission and no environment variable;
 - adds the command `/next` (`/whats-next` when another has `/next`), and
   opens, draws and closes its panes.
 
@@ -207,5 +214,7 @@ panes open, loads again; `classic.SessionStart` loads again after `/clear`;
 and only notes a change to Icons or Compact, so the panes follow it; the
 `ui` hooks draw the panes and follow their scrolling, focus and closing.
 
-The scripts in `docs/` (`check-tokens.sh`, `check-marketplace.sh`,
-`shoot.py`) are for working on What's Next: the mod never runs them.
+The scripts in `docs/` are for working on What's Next: the mod never runs
+them. `check-tokens.sh` and `check-marketplace.sh` only read the mod's files to
+check them, and change none; `shoot.py` takes the screenshots in `images/` for
+this README.
